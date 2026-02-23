@@ -1,0 +1,5 @@
+kiteconnect
+dash
+dash-bootstrap-components
+pandas
+python-dotenv
