@@ -6,10 +6,12 @@ from domain.portfolio import build_portfolio_dataframe, compute_portfolio_health
 from domain.allocation import compute_allocation
 from domain.concentration import compute_concentration
 from dashboard.layout import build_dashboard
+from dashboard.callbacks import register_callbacks
 
 
-app = Dash(__name__)
+app = Dash(__name__, suppress_callback_exceptions=True)
 register_routes(app)
+register_callbacks(app)
 
 
 def serve_layout():
@@ -37,4 +39,4 @@ def serve_layout():
 app.layout = serve_layout
 
 if __name__ == "__main__":
-    app.run(debug=False, use_reloader=False)
+    app.run(debug=True, use_reloader=True)

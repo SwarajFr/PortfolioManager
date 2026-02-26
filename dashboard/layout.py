@@ -1,8 +1,8 @@
-from dash import html
+from dash import html, dcc
 
 
 # -------------------------------------------------
-# Dashboard Root
+# Dashboard Root (with live-update interval)
 # -------------------------------------------------
 
 def build_dashboard(health, allocation, concentration):
@@ -10,10 +10,39 @@ def build_dashboard(health, allocation, concentration):
     return html.Div(
         className="page",
         children=[
-            html.Div("Portfolio Health", className="page-title"),
-            build_health_section(health),
-            build_allocation_section(allocation),
-            build_concentration_section(concentration),
+
+            # Hidden interval component — fires every 5 seconds
+            dcc.Interval(
+                id="live-interval",
+                interval=5 * 1000,   # 5 000 ms
+                n_intervals=0,
+            ),
+
+            # Header bar with title + live status
+            html.Div(
+                className="header-bar",
+                children=[
+                    html.Div("Portfolio Health", className="page-title"),
+                    html.Div(
+                        className="live-indicator",
+                        children=[
+                            html.Span(className="live-dot"),
+                            html.Span("LIVE", className="live-label"),
+                            html.Span("", id="last-updated", className="last-updated-text"),
+                        ]
+                    ),
+                ]
+            ),
+
+            # Dynamic container — everything below refreshes in real-time
+            html.Div(
+                id="live-dashboard",
+                children=[
+                    build_health_section(health),
+                    build_allocation_section(allocation),
+                    build_concentration_section(concentration),
+                ]
+            ),
         ]
     )
 

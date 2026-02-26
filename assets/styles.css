@@ -19,10 +19,56 @@ body {
   padding: 40px 24px;
 }
 
+/* =====================================================
+   HEADER BAR  (title + live indicator)
+===================================================== */
+
+.header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
 .page-title {
   font-size: 22px;
   font-weight: 600;
-  margin-bottom: 28px;
+}
+
+/* --- Live indicator (pulsing green dot) --- */
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1a7f37;
+  box-shadow: 0 0 0 0 rgba(26,127,55,.6);
+  animation: pulse-dot 1.8s infinite;
+}
+
+@keyframes pulse-dot {
+  0%   { box-shadow: 0 0 0 0   rgba(26,127,55,.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(26,127,55,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(26,127,55,0);   }
+}
+
+.live-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: #1a7f37;
+}
+
+.last-updated-text {
+  font-size: 11px;
+  color: #999;
+  margin-left: 4px;
 }
 
 /* =====================================================
@@ -42,6 +88,12 @@ body {
   border-radius: 14px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.05);
   border-left: 4px solid transparent;
+  transition: box-shadow .3s ease;
+  animation: card-fade-in .45s ease both;
+}
+
+.metric-card:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.09);
 }
 
 .metric-card.positive {
@@ -63,6 +115,19 @@ body {
 .metric-value {
   font-size: 24px;
   font-weight: 600;
+  animation: value-tick .5s ease;
+}
+
+/* subtle "tick" flash on every refresh */
+@keyframes value-tick {
+  0%   { opacity: .6;  }
+  100% { opacity: 1;   }
+}
+
+/* card slide-in on first load */
+@keyframes card-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
 }
 
 /* =====================================================
@@ -91,6 +156,7 @@ body {
   border-radius: 14px;
   margin-bottom: 32px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.05);
+  animation: card-fade-in .45s ease both;
 }
 
 .allocation-title {
@@ -120,6 +186,12 @@ body {
 .data-table td {
   padding: 12px 10px;
   border-bottom: 1px solid #f0f0f0;
+  font-variant-numeric: tabular-nums;
+  animation: value-tick .5s ease;
+}
+
+.data-table tr {
+  transition: background .2s ease;
 }
 
 .data-table tr:hover {
