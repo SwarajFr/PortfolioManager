@@ -20,55 +20,67 @@ body {
 }
 
 /* =====================================================
-   HEADER BAR  (title + live indicator)
+   PAGE TITLE
 ===================================================== */
-
-.header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 28px;
-}
 
 .page-title {
   font-size: 22px;
   font-weight: 600;
+  margin-bottom: 20px;
 }
 
-/* --- Live indicator (pulsing green dot) --- */
+/* =====================================================
+   TAB BAR  (chrome-like)
+===================================================== */
 
-.live-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.tab-bar {
+  border-bottom: 2px solid #e6e6e6;
+  margin-bottom: 0;
 }
 
-.live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #1a7f37;
-  box-shadow: 0 0 0 0 rgba(26,127,55,.6);
-  animation: pulse-dot 1.8s infinite;
+/* Individual tab */
+.tab-item {
+  display: inline-block;
+  padding: 12px 28px !important;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  color: #888;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+  margin-bottom: -2px;
 }
 
-@keyframes pulse-dot {
-  0%   { box-shadow: 0 0 0 0   rgba(26,127,55,.55); }
-  70%  { box-shadow: 0 0 0 8px rgba(26,127,55,0);   }
-  100% { box-shadow: 0 0 0 0   rgba(26,127,55,0);   }
+.tab-item:hover {
+  color: #333;
 }
 
-.live-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: #1a7f37;
+/* Active tab */
+.tab-item--active {
+  color: #111 !important;
+  border-bottom: 2px solid #111 !important;
+  background: transparent !important;
 }
 
-.last-updated-text {
-  font-size: 11px;
-  color: #999;
-  margin-left: 4px;
+/* Tab content container */
+.tab-content {
+  padding-top: 28px;
+  animation: tab-fade-in .3s ease both;
+}
+
+@keyframes tab-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =====================================================
@@ -86,14 +98,14 @@ body {
   background: #fff;
   padding: 22px;
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.05);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.05);
   border-left: 4px solid transparent;
   transition: box-shadow .3s ease;
   animation: card-fade-in .45s ease both;
 }
 
 .metric-card:hover {
-  box-shadow: 0 8px 32px rgba(0,0,0,0.09);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.09);
 }
 
 .metric-card.positive {
@@ -115,19 +127,19 @@ body {
 .metric-value {
   font-size: 24px;
   font-weight: 600;
-  animation: value-tick .5s ease;
-}
-
-/* subtle "tick" flash on every refresh */
-@keyframes value-tick {
-  0%   { opacity: .6;  }
-  100% { opacity: 1;   }
 }
 
 /* card slide-in on first load */
 @keyframes card-fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0);   }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =====================================================
@@ -155,7 +167,7 @@ body {
   padding: 24px;
   border-radius: 14px;
   margin-bottom: 32px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.05);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.05);
   animation: card-fade-in .45s ease both;
 }
 
@@ -187,7 +199,6 @@ body {
   padding: 12px 10px;
   border-bottom: 1px solid #f0f0f0;
   font-variant-numeric: tabular-nums;
-  animation: value-tick .5s ease;
 }
 
 .data-table tr {
@@ -198,10 +209,22 @@ body {
   background: #fafafa;
 }
 
-.col-text { text-align: left; }
-.col-num { text-align: right; font-variant-numeric: tabular-nums; }
-.col-center { text-align: center; }
-.col-action { text-align: right; }
+.col-text {
+  text-align: left;
+}
+
+.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-center {
+  text-align: center;
+}
+
+.col-action {
+  text-align: right;
+}
 
 /* =====================================================
    BADGES
@@ -227,4 +250,74 @@ body {
 .badge.danger {
   background: #111;
   color: #fff;
+}
+
+/* --- Exit action badges --------------------------------- */
+
+.badge.badge-exit {
+  background: #c1121f;
+  color: #fff;
+}
+
+.badge.badge-trim {
+  background: #e07000;
+  color: #fff;
+}
+
+.badge.badge-watch {
+  background: #f5c000;
+  color: #111;
+}
+
+.badge.badge-hold {
+  background: #1a7f37;
+  color: #fff;
+}
+
+/* =====================================================
+   EXIT SCORE BAR  (inline gauge in table cell)
+===================================================== */
+
+.score-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.score-bar-track {
+  width: 60px;
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .4s ease;
+}
+
+.score-bar-fill.badge-exit {
+  background: #c1121f;
+}
+
+.score-bar-fill.badge-trim {
+  background: #e07000;
+}
+
+.score-bar-fill.badge-watch {
+  background: #f5c000;
+}
+
+.score-bar-fill.badge-hold {
+  background: #1a7f37;
+}
+
+.score-number {
+  font-weight: 600;
+  font-size: 13px;
+  min-width: 24px;
+  text-align: right;
 }

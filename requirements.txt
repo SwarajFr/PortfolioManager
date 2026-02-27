@@ -2,4 +2,5 @@ kiteconnect
 dash
 dash-bootstrap-components
 pandas
+numpy
 python-dotenv
