@@ -3,7 +3,7 @@ import webbrowser
 from kiteconnect import KiteConnect
 from flask import request, redirect
 
-from config.settings import API_KEY, API_SECRET
+from config.env import API_KEY, API_SECRET
 
 kite = KiteConnect(api_key=API_KEY)
 

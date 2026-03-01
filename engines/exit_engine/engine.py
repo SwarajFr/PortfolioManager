@@ -4,96 +4,62 @@ from services.price_history import (
     compute_moving_averages,
     compute_annualized_volatility,
 )
+from engines.exit_engine.settings import (
+    LOSS_SEVERITY_TIERS, LOSS_SEVERITY_MAX,
+    RISK_RATIO_CAP, RISK_RATIO_TIERS, RISK_RATIO_MAX,
+    RAR_TIERS, RAR_MAX,
+    TREND_BELOW_MA50, TREND_DEATH_CROSS,
+    CONCENTRATION_TIERS, CONCENTRATION_MAX,
+    ACTION_TIERS, VOL_FLOOR, HISTORY_DAYS,
+)
 
-# =========================
-# KPI 1 — Loss Severity (0–25)
-# =========================
 
 def score_loss_severity(return_pct):
     if return_pct >= 0:
         return 0
-    if return_pct >= -10:
-        return 10
-    if return_pct >= -20:
-        return 18
-    return 25
+    for threshold, score in LOSS_SEVERITY_TIERS:
+        if return_pct >= threshold:
+            return score
+    return LOSS_SEVERITY_MAX
 
-
-# =========================
-# KPI 2 — Risk vs Portfolio Median (0–20)
-# =========================
 
 def score_risk_vs_median(stock_vol, median_vol):
     if median_vol == 0:
         return 0
+    ratio = min(stock_vol / median_vol, RISK_RATIO_CAP)
+    for threshold, score in RISK_RATIO_TIERS:
+        if ratio <= threshold:
+            return score
+    return RISK_RATIO_MAX
 
-    ratio = min(stock_vol / median_vol, 2.0)  # cap extreme volatility spikes to avoid noise dominating
-
-    if ratio <= 1.0:
-        return 0
-    if ratio <= 1.2:
-        return 8
-    if ratio <= 1.5:
-        return 14
-    return 20
-
-
-# =========================
-# KPI 3 — Risk-Adjusted Inefficiency (0–20)
-# =========================
 
 def score_rar_inefficiency(rar, median_rar):
     if median_rar == 0:
         return 0
-
     if rar >= median_rar:
         return 0
-    if rar >= 0:
-        return 8
-    if rar >= -1:
-        return 14
-    return 20
+    for threshold, score in RAR_TIERS:
+        if rar >= threshold:
+            return score
+    return RAR_MAX
 
-
-# =========================
-# KPI 4 — Trend Weakness (0–20)
-# =========================
 
 def score_trend_weakness(ltp, ma50, ma200):
     if ma50 is None:
         return 0
-
     if ma200 is not None and ltp < ma50 and ma50 < ma200:
-        return 20
+        return TREND_DEATH_CROSS
     if ltp < ma50:
-        return 10
+        return TREND_BELOW_MA50
     return 0
 
 
-# =========================
-# KPI 5 — Concentration Penalty (0–15)
-# =========================
-
 def score_concentration(weight_pct):
-    if weight_pct <= 5:
-        return 0
-    if weight_pct <= 8:
-        return 5
-    if weight_pct <= 12:
-        return 10
-    return 15
+    for threshold, score in CONCENTRATION_TIERS:
+        if weight_pct <= threshold:
+            return score
+    return CONCENTRATION_MAX
 
-
-# =========================
-# Action Mapping
-# =========================
-
-ACTION_TIERS = [
-    (70, "Exit",  "badge-exit"),
-    (50, "Trim",  "badge-trim"),
-    (30, "Watch", "badge-watch"),
-    (0,  "Hold",  "badge-hold"),
-]
 
 def map_action(score):
     for threshold, label, badge in ACTION_TIERS:
@@ -102,37 +68,29 @@ def map_action(score):
     return "Hold", "badge-hold"
 
 
-# =========================
-# Orchestrator
-# =========================
-
 def compute_exit_signals(kite, df):
     total_value = df["value"].sum()
     results = []
-
     histories = {}
     vols = {}
     rars = {}
 
-    # fetch history once per stock (avoids double API calls + MA/vol mismatch)
     for _, row in df.iterrows():
         symbol = row["tradingsymbol"]
         token = row["instrument_token"]
 
-        hist = fetch_historical_data(kite, token, days=365)
+        hist = fetch_historical_data(kite, token, days=HISTORY_DAYS)
         histories[symbol] = hist
 
         vol = compute_annualized_volatility(hist)
         vols[symbol] = vol
 
         ret = row["return_pct"]
-        rars[symbol] = (ret / 100) / vol if vol > 0 else 0.0  # fix unit mismatch (percent → decimal)
+        rars[symbol] = (ret / 100) / vol if vol > 0 else 0.0  # percent → decimal
 
-    # exclude ultra-low vol instruments so ETFs don’t distort median risk
-    vol_values = [v for v in vols.values() if v > 0.08]
+    vol_values = [v for v in vols.values() if v > VOL_FLOOR]
     median_vol = float(np.median(vol_values)) if vol_values else 0.0
 
-    # exclude zero RAR values to avoid collapsing median toward zero
     rar_values = [r for r in rars.values() if r != 0]
     median_rar = float(np.median(rar_values)) if rar_values else 0.0
 

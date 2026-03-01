@@ -1,0 +1,6 @@
+CATEGORY_TARGETS = {
+    "INDIAEQUITYETF": (20, 24),
+    "METALS": (15, 18),
+    "USEQUITY": (15, 18),
+    "INDIAEQUITY": (40, 50),
+}
