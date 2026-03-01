@@ -9,7 +9,7 @@ from domain.exit_engine import compute_exit_signals
 from dashboard.layout import build_dashboard
 
 
-app = Dash(__name__, suppress_callback_exceptions=True)
+app = Dash(__name__,title="Portfolio Manager" ,suppress_callback_exceptions=True)
 register_routes(app)
 
 
