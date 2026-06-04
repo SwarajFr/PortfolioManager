@@ -85,7 +85,8 @@ export default function FragilityHeatmap({ corr_matrix = [], tickers_corr = [] }
                 fill={corrColor(val, i === j)}
                 rx={1}
                 onMouseEnter={() =>
-                  setTooltip({ x: x + CELL, y, a: tickers_corr[i], b: tickers_corr[j], val })
+                  // Flip tooltip to left side for right-half columns to avoid clipping
+                  setTooltip({ x: j > N / 2 ? x - CELL * 5 : x + CELL, y, a: tickers_corr[i], b: tickers_corr[j], val })
                 }
                 onMouseLeave={() => setTooltip(null)}
                 style={{ cursor: "default" }}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getFragilityWhatIf } from "../../../services/fragilityService";
 
 function Delta({ label, before, after, format = (v) => v.toFixed(2), isLoss = false }) {
@@ -35,6 +35,13 @@ export default function FragilityWhatIfPanel({
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Reset slider and results when the user switches to a different holding.
+  useEffect(() => {
+    setWeight(selected ? Math.round(selected.trim_target_weight) : 10);
+    setResult(null);
+    setError(null);
+  }, [selected]);
 
   const selectedHolding =
     result?.holdings?.find((h) => h.ticker === selected?.ticker) ?? null;

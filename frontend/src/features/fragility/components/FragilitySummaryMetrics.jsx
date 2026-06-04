@@ -92,7 +92,9 @@ export default function FragilitySummaryMetrics({ data }) {
         {"  ·  Stress loss "}
         <span className="text-[var(--text-1)]">{stress_loss_pct.toFixed(1)}%</span>
         {" → "}
-        <span className="text-[var(--profit)]">{stress_loss_new_pct.toFixed(1)}%</span>
+        <span style={{ color: stress_loss_new_pct < stress_loss_pct ? "var(--profit)" : "var(--loss)" }}>
+          {stress_loss_new_pct.toFixed(1)}%
+        </span>
       </p>
     </div>
   );
