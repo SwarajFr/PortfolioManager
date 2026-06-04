@@ -4,7 +4,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.covariance import LedoitWolf
-from scipy.linalg import eigvalsh
 
 from core.settings_store import load_settings, save_settings
 
@@ -55,7 +54,9 @@ class FragilityEngine:
         total = sum(w_raw.values())
         w_dict = {t: v / total for t, v in w_raw.items()}
         tickers = list(w_dict.keys())
-        R = R[tickers]
+        R = R[tickers].dropna()  # drop any remaining NaN rows after alignment
+        if len(R) < self.long_window:
+            return self._empty_result(excluded + [t for t in tickers if t not in excluded])
         w = np.array([w_dict[t] for t in tickers])
         N = len(tickers)
 
@@ -83,7 +84,7 @@ class FragilityEngine:
 
         # ── Stage 4: MRC and trim target ─────────────────────────────────────
         port_var = float(w @ cov @ w)
-        mrc = (cov @ w) / port_var  # fractional risk contributions, sums to 1
+        mrc = w * (cov @ w) / port_var  # fractional risk contributions, sums to 1 (element-wise multiply by w)
         mrc_pct = mrc * 100.0
 
         med_mrc = float(np.median(mrc))
@@ -104,7 +105,7 @@ class FragilityEngine:
         # improvement when trim weights are more evenly distributed.
         w_trim = trim_target_w
         port_var_trim = float(w_trim @ cov @ w_trim)
-        mrc_trim = (cov @ w_trim) / port_var_trim
+        mrc_trim = w_trim * (cov @ w_trim) / port_var_trim  # fractional risk contributions, sums to 1
         enb_new = float(1.0 / np.sum(mrc_trim ** 2))
         # Use same MRC formula for base ENB (consistent with what-if)
         enb = float(1.0 / np.sum(mrc ** 2))
@@ -178,12 +179,14 @@ class FragilityEngine:
         return history
 
     def _empty_result(self, excluded: list[str]) -> dict:
+        stored = load_settings(_ENB_HISTORY_TABLE, _ENB_HISTORY_DEFAULTS)
+        existing_history = stored.get("history", [])
         return {
             "enb": 0.0, "enb_new": 0.0,
             "regime_label": "LOW", "regime_delta": 0.0,
             "mean_corr_long": 0.0,
             "stress_loss_pct": 0.0, "stress_loss_new_pct": 0.0,
-            "enb_history": [],
+            "enb_history": existing_history,
             "tickers_included": [], "tickers_excluded": excluded,
             "corr_matrix": [], "tickers_corr": [],
             "holdings": [],
