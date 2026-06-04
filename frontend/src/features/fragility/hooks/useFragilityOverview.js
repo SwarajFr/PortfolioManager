@@ -1,9 +1,9 @@
 import { useCallback } from "react";
 import { useAsyncData } from "../../../hooks/useAsyncData";
-import { getFragilityOverview } from "../../../services/fragilityService";
+import { getFragilityAnalysis } from "../../../services/fragilityService";
 
-export function useFragilityOverview() {
-  return useAsyncData(useCallback(() => getFragilityOverview(), []), {
+export function useFragilityAnalysis() {
+  return useAsyncData(useCallback(() => getFragilityAnalysis(), []), {
     errorMessage: "Failed to load portfolio fragility",
   });
 }
