@@ -1,13 +1,27 @@
-from .data import get_cash_value, get_historical_data, get_holdings
-from .compute import compute_fragility_overview
+from .data import get_holdings, get_prices
+from .engine import FragilityEngine
+from .settings import get_settings
 
 
-def get_fragility_overview():
-    df = get_holdings()
-    tokens = df["instrument_token"].dropna().unique().tolist() if not df.empty else []
-    history = get_historical_data(tokens) if tokens else {}
-    try:
-        cash_value = get_cash_value()
-    except Exception:
-        cash_value = 0.0
-    return compute_fragility_overview(df, history, cash_value=cash_value)
+def get_fragility_analysis() -> dict:
+    settings = get_settings()
+    holdings = get_holdings()
+    prices, weights = get_prices(holdings)
+    if prices.empty or not weights:
+        return FragilityEngine().run(prices, weights)
+    engine = FragilityEngine(long_window=settings.get("long_window", 90))
+    return engine.run(prices, weights)
+
+
+def get_fragility_whatif(ticker: str, new_weight_pct: float) -> dict:
+    settings = get_settings()
+    holdings = get_holdings()
+    prices, weights = get_prices(holdings)
+    if prices.empty or not weights:
+        return FragilityEngine().run(prices, weights)
+    # Override weight for the specified ticker
+    weights[ticker] = new_weight_pct / 100.0
+    total = sum(weights.values())
+    weights = {k: v / total for k, v in weights.items()}
+    engine = FragilityEngine(long_window=settings.get("long_window", 90))
+    return engine.run(prices, weights)
