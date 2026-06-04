@@ -19,6 +19,8 @@ def get_fragility_whatif(ticker: str, new_weight_pct: float) -> dict:
     prices, weights = get_prices(holdings)
     if prices.empty or not weights:
         return FragilityEngine().run(prices, weights)
+    if ticker not in weights:
+        raise ValueError(f"Ticker '{ticker}' not found in current holdings")
     # Override weight for the specified ticker
     weights[ticker] = new_weight_pct / 100.0
     total = sum(weights.values())

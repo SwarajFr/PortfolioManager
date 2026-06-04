@@ -10,8 +10,8 @@ def get_settings() -> dict:
     return load_settings(_TABLE, _DEFAULTS)
 
 
-def save_fragility_settings(data: dict) -> dict:
-    return save_settings(_TABLE, {**_DEFAULTS, **data})
+def save_fragility_settings(data: dict) -> None:
+    save_settings(_TABLE, {**_DEFAULTS, **data})
 
 
 def reset_fragility_settings() -> dict:

@@ -19,5 +19,7 @@ async def whatif(
 ):
     try:
         return get_fragility_whatif(ticker, new_weight)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
