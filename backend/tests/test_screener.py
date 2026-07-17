@@ -209,3 +209,71 @@ def test_run_combined_equal_weight_and_fallback():
     )
     assert out["is_fallback"] is True
     assert len(out["results"]) == 2  # exactly fallback_n rows
+
+
+import datetime
+
+from features.screener import data as screener_data
+
+
+def test_filter_universe_keeps_only_nse500_equities():
+    instruments = [
+        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "segment": "NSE-EQ"},
+        {"tradingsymbol": "TCS", "instrument_token": 2, "segment": "NSE-EQ"},
+        {"tradingsymbol": "NIFTY 50", "instrument_token": 3, "segment": "INDICES"},
+        {"tradingsymbol": "PENNYX", "instrument_token": 4, "segment": "NSE-EQ"},
+    ]
+    out = screener_data.filter_universe(instruments, "NSE-EQ", {"RELIANCE", "TCS"})
+    assert set(out["tradingsymbol"]) == {"RELIANCE", "TCS"}
+    assert 3 not in list(out["instrument_token"])  # index dropped
+    assert 4 not in list(out["instrument_token"])  # non-member dropped
+
+
+def test_refresh_appends_only_new_dated_candles(db, monkeypatch, tmp_path):
+    # Point settings at the temp cache DB.
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_data.settings, "get_settings", lambda: s)
+
+    universe = pd.DataFrame(
+        {"tradingsymbol": ["RELIANCE"], "instrument_token": [1]}
+    )
+    # Seed one candle at 2026-01-01.
+    screener_cache.upsert_candles(
+        db, "RELIANCE",
+        [{"date": "2026-01-01", "open": 1, "high": 2, "low": 1, "close": 1.5, "volume": 5}],
+    )
+
+    calls = {}
+
+    def fake_fetch(token, from_date, to_date):
+        calls["from_date"] = from_date
+        # Kite would only return candles from `from_date` onward.
+        return [
+            {"date": datetime.date(2026, 1, 2), "open": 1.5, "high": 2.5,
+             "low": 1.4, "close": 2.0, "volume": 6}
+        ]
+
+    result = screener_data.refresh_ohlc(
+        universe_df=universe, fetch=fake_fetch, today=datetime.date(2026, 1, 2)
+    )
+    # Incremental fetch starts strictly after the last stored date.
+    assert calls["from_date"] == datetime.date(2026, 1, 2)
+    df = screener_cache.read_candles(db, "RELIANCE")
+    assert list(df["date"]) == ["2026-01-01", "2026-01-02"]  # appended, not backfilled
+    assert result["updated"] == 1
+
+
+def test_refresh_skips_and_logs_missing_symbol(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_data.settings, "get_settings", lambda: s)
+    universe = pd.DataFrame({"tradingsymbol": ["DELISTED"], "instrument_token": [99]})
+
+    def boom(token, from_date, to_date):
+        raise Exception("instrument not found")
+
+    result = screener_data.refresh_ohlc(
+        universe_df=universe, fetch=boom, today=datetime.date(2026, 1, 2)
+    )
+    assert result["skipped"] == 1  # did not crash
