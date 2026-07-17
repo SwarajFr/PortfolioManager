@@ -277,3 +277,65 @@ def test_refresh_skips_and_logs_missing_symbol(db, monkeypatch):
         universe_df=universe, fetch=boom, today=datetime.date(2026, 1, 2)
     )
     assert result["skipped"] == 1  # did not crash
+
+
+from features.screener import service as screener_service
+
+
+def _seed_signals(db):
+    # Every cached symbol carries ALL registered strategies, exactly as
+    # production does (build_signals_row computes every strategy per symbol).
+    # AAA passes only ma_crossover, BBB passes only breakout.
+    screener_cache.upsert_signal(
+        db, "AAA", "2026-01-03",
+        {"ma_crossover": 0.9, "momentum_12_1": 0.5, "breakout": 0.1,
+         "rsi_reversion": 0.3, "high_52w": 0.4},
+        {"ma_crossover": True, "momentum_12_1": False, "breakout": False,
+         "rsi_reversion": False, "high_52w": False},
+    )
+    screener_cache.upsert_signal(
+        db, "BBB", "2026-01-03",
+        {"ma_crossover": 0.2, "momentum_12_1": 0.6, "breakout": 0.8,
+         "rsi_reversion": 0.7, "high_52w": 0.5},
+        {"ma_crossover": False, "momentum_12_1": False, "breakout": True,
+         "rsi_reversion": False, "high_52w": False},
+    )
+
+
+def test_scan_reads_cache_without_recomputing(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+    _seed_signals(db)
+
+    calls = {"n": 0}
+    real = compute.build_signals_row
+
+    def spy(*a, **k):
+        calls["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(compute, "build_signals_row", spy)
+
+    out = screener_service.run_scan(strategies=["ma_crossover", "breakout"], k=1)
+    assert calls["n"] == 0  # screen reads cached signals; no per-stock recompute
+    assert {r["symbol"] for r in out["results"]} == {"AAA", "BBB"}
+
+
+def test_scan_payload_is_json_serializable(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+    _seed_signals(db)
+    out = screener_service.run_scan()
+    json.dumps(out)  # must not raise
+
+
+def test_status_reports_seed_state(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+    screener_cache.set_meta(db, "seed_complete", "1")
+    status = screener_service.get_status()
+    assert status["seed_complete"] is True
+    json.dumps(status)
