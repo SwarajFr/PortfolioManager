@@ -170,3 +170,42 @@ def test_rank_and_fallback_returns_matches_when_present():
     ranked, is_fallback = compute.rank_and_fallback(agg, matched, fallback_n=10)
     assert is_fallback is False
     assert ranked == ["a", "c"]
+
+
+from features.screener import engine
+
+
+def test_registry_has_all_five_strategies():
+    assert set(engine.REGISTRY) == {
+        "ma_crossover", "momentum_12_1", "breakout", "rsi_reversion", "high_52w"
+    }
+
+
+def test_build_strategies_pulls_params_from_settings():
+    s = screener_settings.get_settings()
+    strategies = engine.build_strategies(s)
+    by_name = {st.name: st for st in strategies}
+    assert by_name["ma_crossover"].params == {"fast": 20, "slow": 50}
+
+
+def test_run_individual_ranks_passing_by_raw_score():
+    scores = pd.DataFrame({"ma_crossover": [0.3, 0.1, 0.9]}, index=["a", "b", "c"])
+    passes = pd.DataFrame({"ma_crossover": [True, False, True]}, index=["a", "b", "c"])
+    out = engine.run_individual("ma_crossover", scores, passes)
+    assert [r["symbol"] for r in out] == ["c", "a"]  # b filtered (no pass)
+    assert out[0]["score"] == 0.9
+
+
+def test_run_combined_equal_weight_and_fallback():
+    scores = pd.DataFrame(
+        {"ma_crossover": [0.9, 0.2], "breakout": [0.1, 0.8]}, index=["a", "b"]
+    )
+    passes = pd.DataFrame(
+        {"ma_crossover": [False, False], "breakout": [False, False]},
+        index=["a", "b"],
+    )
+    out = engine.run_combined(
+        ["ma_crossover", "breakout"], {}, "all", 2, scores, passes
+    )
+    assert out["is_fallback"] is True
+    assert len(out["results"]) == 2  # exactly fallback_n rows
