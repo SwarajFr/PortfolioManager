@@ -119,3 +119,54 @@ def test_high_52w_positive_case():
     df = _uptrend_df()
     assert bool(compute.high_52w_pass(df, 252, 0.90).iloc[-1]) is True
     assert compute.high_52w_score(df, 252).iloc[-1] == pytest.approx(1.0, abs=0.02)
+
+
+def test_percentile_normalize_range_and_monotonic():
+    s = pd.Series([10.0, 20.0, 30.0, 40.0], index=["a", "b", "c", "d"])
+    norm = compute.percentile_normalize(s)
+    assert norm.min() >= 0.0 and norm.max() <= 1.0
+    # Monotonic: order preserved.
+    assert list(norm.sort_values().index) == ["a", "b", "c", "d"]
+
+
+def test_aggregate_equal_weight_equals_mean():
+    norm = pd.DataFrame(
+        {"x": [0.2, 0.8], "y": [0.4, 0.6]}, index=["a", "b"]
+    )
+    agg = compute.aggregate(norm, {"x": 1.0, "y": 1.0})
+    assert agg["a"] == pytest.approx((0.2 + 0.4) / 2)
+    assert agg["b"] == pytest.approx((0.8 + 0.6) / 2)
+
+
+def test_k_of_n_all_is_strict_and():
+    passes = pd.DataFrame(
+        {"x": [True, True, False], "y": [True, False, False]},
+        index=["a", "b", "c"],
+    )
+    match = compute.k_of_n_match(passes, "all")
+    assert list(match) == [True, False, False]
+
+
+def test_k_of_n_one_is_union():
+    passes = pd.DataFrame(
+        {"x": [True, True, False], "y": [True, False, False]},
+        index=["a", "b", "c"],
+    )
+    match = compute.k_of_n_match(passes, 1)
+    assert list(match) == [True, True, False]
+
+
+def test_rank_and_fallback_triggers_on_empty_match():
+    agg = pd.Series([0.9, 0.5, 0.7, 0.1, 0.3], index=["a", "b", "c", "d", "e"])
+    matched = pd.Series([False] * 5, index=agg.index)
+    ranked, is_fallback = compute.rank_and_fallback(agg, matched, fallback_n=3)
+    assert is_fallback is True
+    assert ranked == ["a", "c", "b"]  # top-3 by aggregate desc
+
+
+def test_rank_and_fallback_returns_matches_when_present():
+    agg = pd.Series([0.9, 0.5, 0.7], index=["a", "b", "c"])
+    matched = pd.Series([True, False, True], index=agg.index)
+    ranked, is_fallback = compute.rank_and_fallback(agg, matched, fallback_n=10)
+    assert is_fallback is False
+    assert ranked == ["a", "c"]

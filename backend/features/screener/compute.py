@@ -78,3 +78,47 @@ def high_52w_score(df: pd.DataFrame, window: int) -> pd.Series:
 
 def high_52w_pass(df: pd.DataFrame, window: int, proximity: float) -> pd.Series:
     return df["close"] >= proximity * df["high"].rolling(window).max()
+
+
+def build_signals_row(df: pd.DataFrame, strategies: list) -> dict:
+    """Per-stock {score, pass} for every strategy. Used to fill the cache's
+    signals layer. `strategies` are engine.Strategy instances (duck-typed)."""
+    row: dict[str, dict] = {}
+    for st in strategies:
+        score = st.compute(df).iloc[-1]
+        passed = st.passes(df).iloc[-1]
+        row[st.name] = {
+            "score": None if pd.isna(score) else float(score),
+            "pass": bool(passed) if pd.notna(passed) else False,
+        }
+    return row
+
+
+def percentile_normalize(scores: pd.Series) -> pd.Series:
+    """Cross-sectional rank in [0,1], monotonic in the raw score."""
+    return scores.rank(pct=True)
+
+
+def aggregate(norm: pd.DataFrame, weights: dict) -> pd.Series:
+    """Weighted mean of normalized scores: Σ(wₛ·normₛ)/Σwₛ."""
+    w = pd.Series(weights, dtype=float)
+    return (norm[w.index] * w).sum(axis=1) / w.sum()
+
+
+def k_of_n_match(passes: pd.DataFrame, k) -> pd.Series:
+    """Row qualifies if it passes >= K of the given strategies.
+    k == 'all' -> strict AND (all columns); int -> at least k."""
+    counts = passes.astype(bool).sum(axis=1)
+    if k == "all":
+        return counts == passes.shape[1]
+    return counts >= int(k)
+
+
+def rank_and_fallback(
+    agg: pd.Series, matched_mask: pd.Series, fallback_n: int
+) -> tuple[list[str], bool]:
+    """Matched sorted by aggregate desc; if empty, top fallback_n by aggregate."""
+    matched = agg[matched_mask].sort_values(ascending=False)
+    if len(matched) > 0:
+        return list(matched.index), False
+    return list(agg.sort_values(ascending=False).head(fallback_n).index), True
