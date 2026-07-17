@@ -339,3 +339,10 @@ def test_status_reports_seed_state(db, monkeypatch):
     status = screener_service.get_status()
     assert status["seed_complete"] is True
     json.dumps(status)
+
+
+def test_routes_module_exposes_all_endpoints():
+    from features.screener import routes as screener_routes
+
+    paths = {r.path for r in screener_routes.router.routes}
+    assert paths == {"/strategies", "/individual", "/scan", "/refresh", "/status"}
