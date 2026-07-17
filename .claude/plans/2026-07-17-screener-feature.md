@@ -421,9 +421,14 @@ from features.screener import compute
 
 
 def _uptrend_df(n=300):
-    """Strictly rising close/high — MA fast>slow, momentum>0, near highs."""
+    """Strictly rising close/high — MA fast>slow, momentum>0, near highs, and a
+    genuine breakout. The slope MUST be steep enough that the daily close
+    increment exceeds the +1 high offset; otherwise yesterday's high exceeds
+    today's close and `breakout_pass` (which compares to the PRIOR window via
+    shift(1)) is correctly False. linspace(100, 600, 300) gives a ~1.67/day
+    increment > 1.0, so today's close clears the prior 20-day high."""
     idx = pd.date_range("2025-01-01", periods=n, freq="D")
-    close = pd.Series(np.linspace(100, 200, n), index=idx)
+    close = pd.Series(np.linspace(100, 600, n), index=idx)
     high = close + 1.0
     low = close - 1.0
     return pd.DataFrame(
@@ -527,6 +532,10 @@ def momentum_pass(df: pd.DataFrame, lookback: int, skip: int) -> pd.Series:
 
 
 # 3. Breakout (prior-window high)
+# NOTE: the `.shift(1)` is REQUIRED — it makes the rolling max cover the PRIOR
+# window (excluding today's own bar), which is the definition of a breakout.
+# Do NOT remove it to make a test pass; if the breakout test fails, the test
+# DATA is wrong (slope too shallow), not this logic.
 def breakout_score(df: pd.DataFrame, n_high: int) -> pd.Series:
     prior_high = df["high"].rolling(n_high).max().shift(1)
     return df["close"] / prior_high
