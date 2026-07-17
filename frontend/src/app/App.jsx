@@ -8,11 +8,13 @@ import LoginPage from "../features/auth/LoginPage";
 const PortfolioOverviewPage = lazy(() => import("../features/portfolio/PortfolioOverviewPage"));
 const ExitSignalsPage = lazy(() => import("../features/exit-signals/ExitSignalsPage"));
 const FragilityPage = lazy(() => import("../features/fragility/FragilityPage"));
+const ScreenerPage = lazy(() => import("../features/screener/ScreenerPage"));
 
 const PAGES = {
   overview: PortfolioOverviewPage,
   exit: ExitSignalsPage,
   fragility: FragilityPage,
+  screener: ScreenerPage,
 };
 
 export default function App() {
@@ -40,11 +42,8 @@ export default function App() {
   if (authenticated === null) {
     return (
       <>
-        <LoadingState
-          title="Opening brokerage workspace"
-          description="Checking Kite session state before loading the dashboard."
-        />
-        <Toaster position="top-right" />
+        <LoadingState title="Connecting" />
+        <Toaster position="top-right" toastOptions={{ className: "terminal-toast" }} />
       </>
     );
   }
@@ -53,7 +52,7 @@ export default function App() {
     return (
       <>
         <LoginPage />
-        <Toaster position="top-right" />
+        <Toaster position="top-right" toastOptions={{ className: "terminal-toast" }} />
       </>
     );
   }
@@ -61,14 +60,7 @@ export default function App() {
   return (
     <>
       <AppShell activeView={activeView} onViewChange={setActiveView}>
-        <Suspense
-          fallback={
-            <LoadingState
-              title="Loading analytics module"
-              description="Preparing the selected workspace."
-            />
-          }
-        >
+        <Suspense fallback={<LoadingState title="Loading module" />}>
           <ActivePage />
         </Suspense>
       </AppShell>
