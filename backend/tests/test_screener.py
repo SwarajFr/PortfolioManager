@@ -62,3 +62,60 @@ def test_meta_roundtrip(db):
     assert screener_cache.get_meta(db, "seed_complete") is None
     screener_cache.set_meta(db, "seed_complete", "1")
     assert screener_cache.get_meta(db, "seed_complete") == "1"
+
+
+from features.screener import compute
+
+
+def _uptrend_df(n=300):
+    """Strictly rising close/high — MA fast>slow, momentum>0, near highs, and a
+    genuine breakout. The slope MUST be steep enough that the daily close
+    increment exceeds the +1 high offset; otherwise yesterday's high exceeds
+    today's close and `breakout_pass` (which compares to the PRIOR window via
+    shift(1)) is correctly False. linspace(100, 600, 300) gives a ~1.67/day
+    increment > 1.0, so today's close clears the prior 20-day high."""
+    idx = pd.date_range("2025-01-01", periods=n, freq="D")
+    close = pd.Series(np.linspace(100, 600, n), index=idx)
+    high = close + 1.0
+    low = close - 1.0
+    return pd.DataFrame(
+        {"open": close, "high": high, "low": low, "close": close, "volume": 1000.0},
+        index=idx,
+    )
+
+
+def test_ma_crossover_positive_case():
+    df = _uptrend_df()
+    assert bool(compute.ma_crossover_pass(df, 20, 50).iloc[-1]) is True
+    assert compute.ma_crossover_score(df, 20, 50).iloc[-1] > 0
+
+
+def test_momentum_positive_case():
+    df = _uptrend_df()
+    assert bool(compute.momentum_pass(df, 252, 21).iloc[-1]) is True
+    assert compute.momentum_score(df, 252, 21).iloc[-1] > 0
+
+
+def test_breakout_positive_case():
+    df = _uptrend_df()
+    # Rising series: today's close exceeds the prior 20-day high window.
+    assert bool(compute.breakout_pass(df, 20).iloc[-1]) is True
+    assert compute.breakout_score(df, 20).iloc[-1] > 1.0
+
+
+def test_rsi_reversion_positive_case():
+    # Strictly falling close -> RSI near 0 -> oversold, high contrarian score.
+    idx = pd.date_range("2025-01-01", periods=100, freq="D")
+    close = pd.Series(np.linspace(200, 100, 100), index=idx)
+    df = pd.DataFrame(
+        {"open": close, "high": close + 1, "low": close - 1, "close": close, "volume": 1.0},
+        index=idx,
+    )
+    assert bool(compute.rsi_reversion_pass(df, 14, 30).iloc[-1]) is True
+    assert compute.rsi_reversion_score(df, 14).iloc[-1] > 70
+
+
+def test_high_52w_positive_case():
+    df = _uptrend_df()
+    assert bool(compute.high_52w_pass(df, 252, 0.90).iloc[-1]) is True
+    assert compute.high_52w_score(df, 252).iloc[-1] == pytest.approx(1.0, abs=0.02)
