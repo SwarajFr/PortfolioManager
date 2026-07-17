@@ -1225,16 +1225,23 @@ Append to `backend/tests/test_screener.py`:
 from features.screener import service as screener_service
 
 
-def _seed_two_signals(db):
+def _seed_signals(db):
+    # Every cached symbol carries ALL registered strategies, exactly as
+    # production does (build_signals_row computes every strategy per symbol).
+    # AAA passes only ma_crossover, BBB passes only breakout.
     screener_cache.upsert_signal(
         db, "AAA", "2026-01-03",
-        {"ma_crossover": 0.9, "breakout": 0.1},
-        {"ma_crossover": True, "breakout": False},
+        {"ma_crossover": 0.9, "momentum_12_1": 0.5, "breakout": 0.1,
+         "rsi_reversion": 0.3, "high_52w": 0.4},
+        {"ma_crossover": True, "momentum_12_1": False, "breakout": False,
+         "rsi_reversion": False, "high_52w": False},
     )
     screener_cache.upsert_signal(
         db, "BBB", "2026-01-03",
-        {"ma_crossover": 0.2, "breakout": 0.8},
-        {"ma_crossover": False, "breakout": True},
+        {"ma_crossover": 0.2, "momentum_12_1": 0.6, "breakout": 0.8,
+         "rsi_reversion": 0.7, "high_52w": 0.5},
+        {"ma_crossover": False, "momentum_12_1": False, "breakout": True,
+         "rsi_reversion": False, "high_52w": False},
     )
 
 
@@ -1242,7 +1249,7 @@ def test_scan_reads_cache_without_recomputing(db, monkeypatch):
     s = screener_settings.get_settings()
     s["data"]["cache_path"] = db
     monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    _seed_two_signals(db)
+    _seed_signals(db)
 
     calls = {"n": 0}
     real = compute.build_signals_row
@@ -1262,7 +1269,7 @@ def test_scan_payload_is_json_serializable(db, monkeypatch):
     s = screener_settings.get_settings()
     s["data"]["cache_path"] = db
     monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    _seed_two_signals(db)
+    _seed_signals(db)
     out = screener_service.run_scan()
     json.dumps(out)  # must not raise
 
