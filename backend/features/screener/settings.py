@@ -21,7 +21,7 @@ _DEFAULTS = {
         "normalization": "percentile",
     },
     "universe": {
-        "segment": "NSE-EQ",
+        "segment": "NSE",  # Kite instruments() segment value for NSE cash equity (instrument_type "EQ")
         "constituents_path": "data/nse500.csv",  # relative to backend/
         "membership_column": "Symbol",
     },

@@ -28,7 +28,7 @@ def test_defaults_have_all_config_keys():
     assert d["screener"]["default_k"] == "all"
     assert d["screener"]["fallback_n"] == 10
     assert d["screener"]["normalization"] == "percentile"
-    assert d["universe"]["segment"] == "NSE-EQ"
+    assert d["universe"]["segment"] == "NSE"
     assert d["data"]["seed_lookback_days"] == 500
     assert d["data"]["kite_rate_limit_rps"] == 3.0
 
@@ -217,13 +217,14 @@ from features.screener import data as screener_data
 
 
 def test_filter_universe_keeps_only_nse500_equities():
+    # Kite instruments() uses segment "NSE" (not "NSE-EQ") for cash equities.
     instruments = [
-        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "segment": "NSE-EQ"},
-        {"tradingsymbol": "TCS", "instrument_token": 2, "segment": "NSE-EQ"},
+        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "segment": "NSE"},
+        {"tradingsymbol": "TCS", "instrument_token": 2, "segment": "NSE"},
         {"tradingsymbol": "NIFTY 50", "instrument_token": 3, "segment": "INDICES"},
-        {"tradingsymbol": "PENNYX", "instrument_token": 4, "segment": "NSE-EQ"},
+        {"tradingsymbol": "PENNYX", "instrument_token": 4, "segment": "NSE"},
     ]
-    out = screener_data.filter_universe(instruments, "NSE-EQ", {"RELIANCE", "TCS"})
+    out = screener_data.filter_universe(instruments, "NSE", {"RELIANCE", "TCS"})
     assert set(out["tradingsymbol"]) == {"RELIANCE", "TCS"}
     assert 3 not in list(out["instrument_token"])  # index dropped
     assert 4 not in list(out["instrument_token"])  # non-member dropped
