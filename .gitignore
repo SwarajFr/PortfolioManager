@@ -6,6 +6,10 @@ __pycache__/
 *.pyd
 backend/.env
 backend/settings.db
+# Screener OHLC/signals cache (generated at runtime; WAL + SHM sidecars)
+backend/screener_cache.db
+backend/screener_cache.db-shm
+backend/screener_cache.db-wal
 
 # Node / Frontend
 frontend/node_modules/
