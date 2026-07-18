@@ -1,10 +1,10 @@
 import { clamp } from "../../../utils/finance";
 
 function getScoreColor(score) {
-  if (score >= 70) return "#fb7185";
-  if (score >= 50) return "#fb923c";
-  if (score >= 30) return "#facc15";
-  return "#2a2a35";
+  if (score >= 70) return "var(--color-loss)";
+  if (score >= 50) return "var(--color-warning)";
+  if (score >= 30) return "var(--color-warning)";
+  return "var(--color-profit)";
 }
 
 export default function ExitScoreBar({ score }) {
@@ -18,14 +18,13 @@ export default function ExitScoreBar({ score }) {
         {Array.from({ length: 10 }).map((_, index) => (
           <div
             key={index}
-            className="h-2 rounded-[2px]"
             style={{
-              backgroundColor: index < filled ? color : "#2a2a35",
+              backgroundColor: index < filled ? color : "rgba(255,255,255,0.06)",
             }}
           />
         ))}
       </div>
-      <span className="w-10 text-right font-mono text-[10px] font-semibold tabular-nums text-[var(--text-1)]">
+      <span className="w-9 text-right font-mono text-[var(--text-xs)] font-semibold tabular-nums text-[var(--color-text)]">
         {score}
       </span>
     </div>

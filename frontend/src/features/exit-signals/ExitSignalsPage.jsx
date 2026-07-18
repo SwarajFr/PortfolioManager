@@ -25,12 +25,7 @@ export default function ExitSignalsPage() {
   }, [refresh]);
 
   if (loading) {
-    return (
-      <LoadingState
-        title="Analysing exit pressure"
-        description="Fetching price history and scoring holdings across loss, volatility, efficiency, trend, and concentration."
-      />
-    );
+    return <LoadingState title="Scoring exit pressure" />;
   }
 
   if (!data) {
@@ -38,12 +33,8 @@ export default function ExitSignalsPage() {
   }
 
   return (
-    <PageShell
-      eyebrow="Exit Signals"
-      title="Rule-based discipline for trim, watch, and exit decisions."
-      description="A compact risk grid that turns portfolio state and price history into explainable action scores."
-    >
-      <div className="space-y-6">
+    <PageShell eyebrow="Risk Engine" title="Exit Signals">
+      <div className="space-y-5">
         <ExitSummaryMetrics summary={data.summary} />
         <ExitSignalsTable signals={data.signals || []} />
       </div>

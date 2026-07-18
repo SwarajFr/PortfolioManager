@@ -2,15 +2,16 @@ import { cn } from "../../utils/classNames";
 
 const VARIANTS = {
   primary:
-    "border-[var(--border-1)] bg-[var(--surface)] text-[var(--text-1)] hover:border-[var(--text-2)]",
+    "border-transparent bg-[var(--color-accent)] text-black hover:brightness-110",
   secondary:
-    "border-[var(--border-1)] bg-transparent text-[var(--text-2)] hover:border-[var(--text-2)] hover:text-[var(--text-1)]",
+    "border-[var(--color-border-strong)] bg-transparent text-[var(--color-text)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]",
   ghost:
-    "border-transparent bg-transparent text-[var(--text-2)] hover:text-[var(--text-1)]",
+    "border-transparent bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
   danger:
-    "border-[rgba(255,69,96,0.3)] bg-[rgba(255,69,96,0.12)] text-[var(--loss)] hover:bg-[rgba(255,69,96,0.18)]",
+    "border-[var(--color-border-strong)] bg-transparent text-[var(--color-loss)] hover:border-[var(--color-loss)]",
 };
 
+/** Token-driven accessible button. */
 export default function Button({
   children,
   className = "",
@@ -24,8 +25,8 @@ export default function Button({
       type={type}
       disabled={disabled}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-[3px] border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] transition duration-80",
-        "focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-1)] disabled:cursor-not-allowed disabled:opacity-45",
+        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] border px-3.5 py-2 font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em] transition duration-[var(--duration-fast)]",
+        "disabled:cursor-not-allowed disabled:opacity-45",
         VARIANTS[variant],
         className,
       )}

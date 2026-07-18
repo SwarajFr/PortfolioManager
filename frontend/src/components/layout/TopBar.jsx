@@ -5,76 +5,74 @@ function emitDashboardEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
 }
 
+const railButton =
+  "inline-flex h-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 font-mono text-[0.625rem] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)] transition hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]";
+
 export default function TopBar({ activeItem, onViewChange }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-3 sm:px-6 lg:px-8">
-      <div className="flex w-full flex-wrap items-center gap-3">
+    <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-rail)] px-4 py-3 sm:px-6 lg:h-screen lg:w-[212px] lg:shrink-0 lg:border-b-0 lg:border-r lg:px-4 lg:py-5">
+      <div className="flex w-full flex-wrap items-center gap-3 lg:h-full lg:flex-col lg:items-stretch lg:gap-6">
         <button
-          className="flex h-9 w-9 items-center justify-center rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] font-mono text-[11px] font-bold tracking-[0.16em] text-[var(--text-1)]"
+          aria-label="Return to portfolio overview"
+          className="flex items-center gap-2 text-left"
           onClick={() => onViewChange("overview")}
           type="button"
         >
-          PO
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" />
+          <span className="font-display text-[0.9rem] font-bold tracking-[-0.02em] text-[var(--color-text)]">
+            Portfolio<span className="text-[var(--color-text-muted)]"> Optimizer</span>
+          </span>
         </button>
-        <div className="min-w-fit">
-          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--text-3)]">
-            {activeItem.eyebrow}
-          </div>
-          <h2 className="mt-1 font-mono text-sm font-semibold tracking-tight text-[var(--text-1)] sm:text-base">
-            {activeItem.label}
-          </h2>
-        </div>
-        <nav className="order-3 flex w-full gap-1 overflow-x-auto border-x border-[var(--border)] px-2 lg:order-none lg:flex-1">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              className={cn(
-                "min-w-fit rounded-[3px] border px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition",
-                item.id === activeItem.id
-                  ? "border-[var(--text-1)] bg-[var(--surface-1)] text-[var(--text-1)]"
-                  : "border-transparent text-[var(--text-2)] hover:border-[var(--border-1)] hover:bg-[var(--surface)] hover:text-[var(--text-1)]",
-              )}
-              onClick={() => onViewChange(item.id)}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
+
+        <nav className="order-3 flex w-full gap-1 overflow-x-auto lg:order-none lg:flex-col lg:gap-0.5 lg:overflow-visible">
+          {NAV_ITEMS.map((item) => {
+            const active = item.id === activeItem.id;
+            return (
+              <button
+                key={item.id}
+                className={cn(
+                  "group relative min-w-fit border-l-2 px-3 py-2 text-left transition",
+                  active
+                    ? "border-[var(--color-accent)] bg-[var(--color-surface-soft)]"
+                    : "border-transparent hover:bg-[var(--color-surface-soft)]",
+                )}
+                onClick={() => onViewChange(item.id)}
+                type="button"
+              >
+                <span
+                  className={cn(
+                    "block font-display text-[var(--text-sm)] font-semibold tracking-[-0.01em]",
+                    active ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)] group-hover:text-[var(--color-text)]",
+                  )}
+                >
+                  {item.label}
+                </span>
+                <span
+                  className={cn(
+                    "hidden font-mono text-[0.5625rem] uppercase tracking-[0.14em] lg:block",
+                    active ? "text-[var(--color-accent)]" : "text-[var(--color-text-faint)]",
+                  )}
+                >
+                  {item.eyebrow}
+                </span>
+              </button>
+            );
+          })}
         </nav>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            aria-label="Configure"
-            className="inline-flex h-8 items-center gap-2 rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] px-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-2)] transition hover:border-[var(--text-2)] hover:text-[var(--text-1)]"
-            onClick={() => emitDashboardEvent("dashboard:configure")}
-            type="button"
-            title="Configure"
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-            >
-              <path d="M4 21V14" />
-              <path d="M4 10V3" />
-              <path d="M12 21V12" />
-              <path d="M12 8V3" />
-              <path d="M20 21V16" />
-              <path d="M20 12V3" />
-              <path d="M2 14H6" />
-              <path d="M10 8H14" />
-              <path d="M18 16H22" />
-            </svg>
-          </button>
-          <button
-            className="inline-flex h-8 items-center rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-2)] transition hover:border-[var(--text-3)] hover:text-[var(--text-1)]"
-            onClick={() => emitDashboardEvent("dashboard:refresh")}
-            type="button"
-          >
+
+        <div className="ml-auto flex items-center gap-2 lg:mt-auto lg:ml-0 lg:flex-col lg:items-stretch">
+          <button className={railButton} onClick={() => emitDashboardEvent("dashboard:refresh")} type="button">
             Refresh
           </button>
+          <button className={railButton} onClick={() => emitDashboardEvent("dashboard:configure")} type="button">
+            Configure
+          </button>
+          <div className="hidden items-center gap-1.5 pt-1 lg:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-profit)]" />
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+              Kite · Live
+            </span>
+          </div>
         </div>
       </div>
     </header>

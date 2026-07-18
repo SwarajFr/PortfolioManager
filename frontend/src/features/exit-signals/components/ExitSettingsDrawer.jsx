@@ -34,7 +34,7 @@ const KPI_STRUCTURE = {
 };
 
 const inputClass =
-  "rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] px-3 py-2 font-mono text-[10px] text-[var(--text-1)] outline-none transition focus:border-[var(--text-2)]";
+  "rounded-[var(--radius-sm)] border border-[var(--border-1)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text-xs)] text-[var(--text-1)] outline-none transition focus:border-[var(--accent)]";
 
 function titleize(value) {
   return value.replaceAll("_", " ");
@@ -110,7 +110,7 @@ export default function ExitSettingsDrawer({ onClose, onSaved }) {
   if (!config) {
     return (
       <Drawer onClose={onClose} title="Exit Settings">
-        <Card className="p-5 text-sm text-slate-400">Loading settings...</Card>
+        <Card className="p-5 text-sm text-[var(--text-2)]">Loading settings...</Card>
       </Drawer>
     );
   }
@@ -132,10 +132,7 @@ export default function ExitSettingsDrawer({ onClose, onSaved }) {
     >
       <div className="space-y-5">
         <Card className="space-y-4 p-4">
-          <div>
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Action Score Thresholds</h3>
-            <p className="mt-1 font-mono text-[10px] text-[var(--text-3)]">Control the minimum score required for each recommendation.</p>
-          </div>
+          <h3 className="label">Action score thresholds</h3>
           {["EXIT", "TRIM", "WATCH"].map((action) => (
             <label key={action} className="flex items-center justify-between gap-4 font-mono text-[10px] text-[var(--text-1)]">
               {action} Threshold
@@ -150,14 +147,11 @@ export default function ExitSettingsDrawer({ onClose, onSaved }) {
         </Card>
 
         <Card className="space-y-4 p-4">
-          <div>
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Function KPI Scores</h3>
-            <p className="mt-1 font-mono text-[10px] text-[var(--text-3)]">Penalty weights for each conditional bracket in the exit engine.</p>
-          </div>
+          <h3 className="label">Function KPI scores</h3>
 
           {Object.entries(KPI_STRUCTURE).map(([kpi, tiers]) => (
-            <div key={kpi} className="border border-[var(--border)] bg-[var(--surface-1)] p-3">
-              <h4 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-3)]">
+              <div key={kpi} className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-1)] p-3">
+              <h4 className="font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-3)]">
                 {titleize(kpi)}
               </h4>
               <div className="mt-3 space-y-2">
