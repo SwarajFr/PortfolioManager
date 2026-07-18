@@ -1,193 +1,278 @@
 # backend/features/fragility/engine.py
+"""Descriptive diversification-metrics engine.
+
+This is the DESCRIPTIVE replacement for the old prescription engine. It reports
+what the portfolio's correlation/concentration structure *is* — it does not
+prescribe trims, urgency scores, or effective-weight targets.
+
+All metrics are estimated off a single Ledoit-Wolf shrunk covariance Σ.
+"""
 from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 from sklearn.covariance import LedoitWolf
 
-from core.settings_store import load_settings, save_settings
-
-_ENB_HISTORY_TABLE = "fragility_enb_history"
-_ENB_HISTORY_DEFAULTS = {"history": []}
-
-SHORT_REGIME_WINDOW = 20
-LONG_REGIME_WINDOW = 90
+TRADING_DAYS = 252
 
 
-def _mean_offdiag_corr(cov: np.ndarray) -> float:
-    sigma = np.sqrt(np.diag(cov))
-    corr = cov / np.outer(sigma, sigma)
-    np.fill_diagonal(corr, 0.0)
-    n = corr.shape[0]
-    return float(corr.sum() / (n * (n - 1))) if n > 1 else 0.0
+@dataclass
+class DiversityResult:
+    """JSON-serializable container for the descriptive metrics.
+
+    ``to_dict()`` is the shape the FastAPI route and React component consume.
+    """
+
+    symbols: list[str]
+    num_positions: int
+    portfolio_variance: float
+    portfolio_vol_daily: float
+    portfolio_vol: float  # annualized — the headline volatility
+    diversification_ratio: float
+    enb: float  # PCA / principal-portfolio ENB (Meucci)
+    weight_entropy: float
+    effective_positions: float
+    normalized_entropy: float
+    concentration_gap: float
+    avg_correlation: float
+    max_correlation: float
+    max_correlation_pair: tuple[str, str] | None
+    correlation_matrix: np.ndarray
+    principal_risk_contributions: list[float]
+    principal_bets: list[list[dict]] = field(default_factory=list)
+    tickers_excluded: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "scalars": {
+                "num_positions": int(self.num_positions),
+                "diversification_ratio": round(float(self.diversification_ratio), 4),
+                "enb": round(float(self.enb), 4),
+                "effective_positions": round(float(self.effective_positions), 4),
+                "normalized_entropy": round(float(self.normalized_entropy), 4),
+                "weight_entropy": round(float(self.weight_entropy), 4),
+                "concentration_gap": round(float(self.concentration_gap), 4),
+                "portfolio_vol": round(float(self.portfolio_vol), 6),
+                "portfolio_vol_daily": round(float(self.portfolio_vol_daily), 6),
+                "portfolio_variance": float(self.portfolio_variance),
+                "avg_correlation": round(float(self.avg_correlation), 4),
+                "max_correlation": round(float(self.max_correlation), 4),
+            },
+            "max_correlation_pair": (
+                list(self.max_correlation_pair) if self.max_correlation_pair else None
+            ),
+            "principal_risk_contributions": [
+                round(float(p), 6) for p in self.principal_risk_contributions
+            ],
+            "principal_bets": self.principal_bets,
+            "correlation": {
+                "symbols": list(self.symbols),
+                "matrix": np.round(self.correlation_matrix, 4).tolist(),
+            },
+            "tickers_excluded": list(self.tickers_excluded),
+        }
 
 
-def _regime_label(delta: float) -> str:
-    if delta < 0.10:
-        return "LOW"
-    if delta <= 0.25:
-        return "RISING"
-    return "CRISIS"
+class DiversityEngine:
+    """Compute descriptive diversification metrics from returns + weights.
 
+    Math-only: everything is derived from the returns and weights via a
+    Ledoit-Wolf shrunk covariance. No external classification data (sector,
+    asset class) is required, since Kite does not provide it.
+    """
 
-class FragilityEngine:
-    def __init__(self, long_window: int = 90):
-        self.long_window = long_window
-
-    def run(self, prices: pd.DataFrame, weights: dict[str, float]) -> dict:
+    def run(self, returns: pd.DataFrame, weights: pd.Series) -> DiversityResult:
         """
-        prices: DataFrame, columns = tickers, index = dates (close prices).
-        weights: {ticker: fraction}, fractions should be positive (will be renormalised).
+        returns: T x N daily returns, columns = symbols.
+        weights: Series {symbol: weight}. Reindexed to ``returns.columns`` and
+                 renormalized to sum 1. Long-only assumed. Raises ValueError if a
+                 weighted symbol has no returns column.
         """
-        # ── Stage 1: Return matrix ──────────────────────────────────────────
-        R = np.log1p(prices.pct_change()).dropna()
+        returns = returns.dropna(how="any")
+        cols = list(returns.columns)
 
-        # Keep only tickers with sufficient history
-        surviving = [c for c in R.columns if R[c].notna().sum() >= self.long_window]
-        excluded = [c for c in R.columns if c not in surviving]
-        R = R[surviving].dropna()
+        # A weighted symbol with no returns column is a hard error (not a silent drop).
+        missing = [
+            s for s in weights.index if s not in cols and float(weights[s]) != 0.0
+        ]
+        if missing:
+            raise ValueError(f"Weighted symbols have no returns: {missing}")
 
-        # Align weights to surviving tickers
-        w_raw = {t: weights[t] for t in surviving if t in weights}
-        if not w_raw or len(w_raw) < 2:
-            return self._empty_result(excluded)
-        total = sum(w_raw.values())
-        w_dict = {t: v / total for t, v in w_raw.items()}
-        tickers = list(w_dict.keys())
-        R = R[tickers].dropna()  # drop any remaining NaN rows after alignment
-        if len(R) < self.long_window:
-            return self._empty_result(excluded + [t for t in tickers if t not in excluded])
-        w = np.array([w_dict[t] for t in tickers])
-        N = len(tickers)
+        w_series = weights.reindex(cols).fillna(0.0).astype(float)
+        held = w_series[w_series > 0].index.tolist()
+        if not held:
+            raise ValueError("No positive-weight positions to analyse.")
 
-        # ── Stage 2: Covariance, ENB, regime delta ──────────────────────────
-        cov = LedoitWolf().fit(R.values).covariance_
+        symbols = held
+        R = returns[held]
+        w = w_series[held].to_numpy()
+        w = w / w.sum()  # renormalize to sum 1
+        N = len(symbols)
+
+        # ── Ledoit-Wolf shrunk covariance (the estimator all metrics share) ──
+        cov = LedoitWolf().fit(R.to_numpy()).covariance_
         sigma = np.sqrt(np.diag(cov))
-        corr = cov / np.outer(sigma, sigma)
-        np.clip(corr, -1.0, 1.0, out=corr)
 
-        # Regime delta
-        recent_short = R.iloc[-SHORT_REGIME_WINDOW:]
-        recent_long = R.iloc[-LONG_REGIME_WINDOW:]
-        cov_long = LedoitWolf().fit(recent_long.values).covariance_ if len(recent_long) >= SHORT_REGIME_WINDOW else cov
-        cov_short = LedoitWolf().fit(recent_short.values).covariance_ if len(recent_short) >= SHORT_REGIME_WINDOW else cov
-        mean_corr_long = _mean_offdiag_corr(cov_long)
-        mean_corr_short = _mean_offdiag_corr(cov_short)
-        regime_delta = float(mean_corr_short - mean_corr_long)
-        label = _regime_label(regime_delta)
+        corr = self._correlation(cov, sigma)
+        avg_corr, max_corr, max_pair = self._correlation_summary(corr, symbols)
 
-        # ── Stage 3: Effective weight ────────────────────────────────────────
-        ew = w + (corr - np.eye(N)) @ w
-        ew = np.clip(ew, 0.0, None)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            ew_ratio = np.where(w > 0, ew / w, 0.0)
-
-        # ── Stage 4: MRC and trim target ─────────────────────────────────────
         port_var = float(w @ cov @ w)
-        mrc = w * (cov @ w) / port_var  # fractional risk contributions, sums to 1 (element-wise multiply by w)
-        mrc_pct = mrc * 100.0
+        port_vol_daily = math.sqrt(port_var) if port_var > 0 else 0.0
 
-        med_mrc = float(np.median(mrc))
-        trim_raw = w * (med_mrc / np.where(mrc > 0, mrc, med_mrc))
-        trim_raw = np.clip(trim_raw, 0.01, None)
-        trim_target_w = trim_raw / trim_raw.sum()
+        dr = self._diversification_ratio(w, sigma, port_vol_daily)
+        enb, prc, bets = self._pca_enb(cov, w, symbols)
+        H, eff_positions, norm_entropy = self._weight_entropy(w, N)
+        concentration_gap = eff_positions / enb if enb > 0 else 0.0
 
-        # Stress loss (99% VaR, equity correlations → 0.85)
-        cov_stressed = cov.copy()
-        for i in range(N):
-            for j in range(N):
-                if i != j:
-                    cov_stressed[i, j] = 0.85 * sigma[i] * sigma[j]
-        stress_loss_pct = float(-2.33 * np.sqrt(w @ cov_stressed @ w) * 100)
+        return DiversityResult(
+            symbols=symbols,
+            num_positions=N,
+            portfolio_variance=port_var,
+            portfolio_vol_daily=port_vol_daily,
+            portfolio_vol=port_vol_daily * math.sqrt(TRADING_DAYS),
+            diversification_ratio=dr,
+            enb=enb,
+            weight_entropy=H,
+            effective_positions=eff_positions,
+            normalized_entropy=norm_entropy,
+            concentration_gap=concentration_gap,
+            avg_correlation=avg_corr,
+            max_correlation=max_corr,
+            max_correlation_pair=max_pair,
+            correlation_matrix=corr,
+            principal_risk_contributions=prc,
+            principal_bets=bets,
+        )
 
-        # What-if: apply trim weights, recompute ENB (MRC-based) + stress loss
-        # Risk-contribution ENB = 1/sum(rc_i^2) is weight-dependent and shows
-        # improvement when trim weights are more evenly distributed.
-        w_trim = trim_target_w
-        port_var_trim = float(w_trim @ cov @ w_trim)
-        mrc_trim = w_trim * (cov @ w_trim) / port_var_trim  # fractional risk contributions, sums to 1
-        enb_new = float(1.0 / np.sum(mrc_trim ** 2))
-        # Use same MRC formula for base ENB (consistent with what-if)
-        enb = float(1.0 / np.sum(mrc ** 2))
-        stress_loss_new_pct = float(-2.33 * np.sqrt(w_trim @ cov_stressed @ w_trim) * 100)
+    # ── Metric 1: correlation structure ─────────────────────────────────────
+    @staticmethod
+    def _correlation(cov: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+        """Corr = D^-1 Σ D^-1 with D = diag(sqrt(diag Σ))."""
+        d_inv = np.diag(1.0 / sigma)
+        corr = d_inv @ cov @ d_inv
+        np.clip(corr, -1.0, 1.0, out=corr)
+        return corr
 
-        # ── ENB history ──────────────────────────────────────────────────────
-        enb_history = self._update_enb_history(enb)
+    @staticmethod
+    def _correlation_summary(
+        corr: np.ndarray, symbols: list[str]
+    ) -> tuple[float, float, tuple[str, str] | None]:
+        """Average & max pairwise correlation over the upper triangle (off-diagonal)."""
+        n = corr.shape[0]
+        iu = np.triu_indices(n, k=1)
+        offdiag = corr[iu]
+        if offdiag.size == 0:
+            return 0.0, 0.0, None
+        avg = float(offdiag.mean())
+        k = int(np.argmax(offdiag))
+        max_corr = float(offdiag[k])
+        i, j = int(iu[0][k]), int(iu[1][k])
+        return avg, max_corr, (symbols[i], symbols[j])
 
-        # ── Stage 5: Urgency score per holding ───────────────────────────────
-        # "falling over last 5 stored values" = current < value 5 steps ago
-        enb_falling = len(enb_history) >= 6 and enb_history[-1] < enb_history[-6]
-        regime_score = 1 if label == "RISING" else (2 if label == "CRISIS" else 0)
-        med_mrc_val = float(np.median(mrc_pct))
+    # ── Metric 2: diversification ratio (Choueifaty & Coignard) ──────────────
+    @staticmethod
+    def _diversification_ratio(
+        w: np.ndarray, sigma: np.ndarray, port_vol: float
+    ) -> float:
+        """DR = (w·σ) / sqrt(w'Σw). Always >= 1 for a valid covariance."""
+        if port_vol <= 0:
+            return 1.0
+        return float((w @ sigma) / port_vol)
 
-        holdings_out = []
-        for i, t in enumerate(tickers):
-            score = 0
-            signals = []
-            if enb_falling:
-                score += 1
-                signals.append("ENB declining")
-            score += regime_score
-            if regime_score > 0:
-                signals.append(f"Regime {label}")
-            if mrc_pct[i] > 2 * med_mrc_val:
-                score += 1
-                signals.append("MRC outlier")
-            if ew_ratio[i] > 1.5:
-                score += 1
-                signals.append("Hidden concentration")
+    # ── Metric 3: PCA / principal-portfolio ENB (Meucci) ─────────────────────
+    @staticmethod
+    def _pca_enb(
+        cov: np.ndarray,
+        w: np.ndarray,
+        symbols: list[str],
+        max_members: int = 5,
+        cum_threshold: float = 0.9,
+    ) -> tuple[float, list[float], list[list[dict]]]:
+        """Effective Number of Bets via principal-component decomposition.
 
-            urgency = "ACT" if score >= 4 else ("WATCH" if score >= 2 else "MONITOR")
-            holdings_out.append({
-                "ticker": t,
-                "weight": round(float(w[i]) * 100, 2),
-                "effective_weight": round(float(ew[i]) * 100, 2),
-                "ew_ratio": round(float(ew_ratio[i]), 3),
-                "mrc": round(float(mrc_pct[i]), 2),
-                "trim_target_weight": round(float(trim_target_w[i]) * 100, 2),
-                "score": int(score),
-                "urgency": urgency,
-                "signals": signals,
-                "hidden_risk": bool(ew_ratio[i] > 1.5),
-            })
+        eigvals, eigvecs = eigh(Σ); clip eigvals >= 1e-15
+        y = eigvecs.T @ w ; contrib = eigvals * y**2 ; p = contrib / contrib.sum()
+        ENB = exp(-Σ p_i ln p_i)
 
-        # Sort by score descending
-        holdings_out.sort(key=lambda x: x["score"], reverse=True)
+        Also returns, for each principal bet (ordered by descending variance
+        contribution), its composition: the holdings whose eigenvector loadings
+        define that uncorrelated direction. ``weight`` is the squared loading
+        (share of the bet's direction, sums to 1 across all names); ``loading``
+        keeps the sign so spread-style bets (long A vs short B) stay visible.
+        The eigenvector sign is arbitrary, so it is fixed to make the dominant
+        loading positive.
 
-        return {
-            "enb": round(enb, 2),
-            "enb_new": round(enb_new, 2),
-            "regime_label": label,
-            "regime_delta": round(regime_delta, 4),
-            "mean_corr_long": round(mean_corr_long, 4),
-            "stress_loss_pct": round(stress_loss_pct, 2),
-            "stress_loss_new_pct": round(stress_loss_new_pct, 2),
-            "enb_history": enb_history,
-            "tickers_included": tickers,
-            "tickers_excluded": excluded,
-            "corr_matrix": corr.tolist(),
-            "tickers_corr": tickers,
-            "holdings": holdings_out,
-        }
+        WARNING — PCA-ENB is *basis-dependent* and reads LOW under eigenvalue
+        degeneracy. For 5 truly independent assets (Σ ≈ σ²·I, all eigenvalues
+        equal) the eigenbasis is arbitrary, so this returns ~3.7, NOT 5. Treat
+        it as an ordering signal, not a ground-truth count.
 
-    def _update_enb_history(self, enb: float) -> list[float]:
-        stored = load_settings(_ENB_HISTORY_TABLE, _ENB_HISTORY_DEFAULTS)
-        history: list[float] = stored.get("history", [])
-        history.append(round(enb, 2))
-        history = history[-30:]
-        save_settings(_ENB_HISTORY_TABLE, {"history": history})
-        return history
+        TODO(min-torsion): the intended upgrade is minimum-torsion ENB
+        (Meucci, Santangelo & Deguest 2015), which is rotation-invariant and
+        avoids this degeneracy artifact. DO NOT implement it from memory — a
+        naive polar-iteration torsion matrix `t` silently fails to diagonalize
+        the factor covariance. Any implementation MUST be validated by checking
+        that  t·Σ·t'  is actually diagonal
+        (max off-diagonal magnitude / max diagonal magnitude ≈ 0) BEFORE its
+        ENB output is trusted.
+        """
+        eigvals, eigvecs = np.linalg.eigh(cov)
+        eigvals = np.clip(eigvals, 1e-15, None)
+        y = eigvecs.T @ w
+        contrib = eigvals * y**2
+        total = contrib.sum()
+        if total <= 0:
+            return 1.0, [], []
+        p = contrib / total
+        p_pos = p[p > 0]
+        enb = float(np.exp(-np.sum(p_pos * np.log(p_pos))))
 
-    def _empty_result(self, excluded: list[str]) -> dict:
-        stored = load_settings(_ENB_HISTORY_TABLE, _ENB_HISTORY_DEFAULTS)
-        existing_history = stored.get("history", [])
-        return {
-            "enb": 0.0, "enb_new": 0.0,
-            "regime_label": "LOW", "regime_delta": 0.0,
-            "mean_corr_long": 0.0,
-            "stress_loss_pct": 0.0, "stress_loss_new_pct": 0.0,
-            "enb_history": existing_history,
-            "tickers_included": [], "tickers_excluded": excluded,
-            "corr_matrix": [], "tickers_corr": [],
-            "holdings": [],
-        }
+        order = np.argsort(p)[::-1]  # bets, most-important variance direction first
+        prc = [float(p[k]) for k in order]
+        bets = [
+            DiversityEngine._bet_composition(eigvecs[:, k], symbols, max_members, cum_threshold)
+            for k in order
+        ]
+        return enb, prc, bets
+
+    @staticmethod
+    def _bet_composition(
+        vec: np.ndarray,
+        symbols: list[str],
+        max_members: int,
+        cum_threshold: float,
+    ) -> list[dict]:
+        """Top holdings defining one principal bet (eigenvector), most-dominant first."""
+        v = vec.astype(float)
+        # Fix arbitrary eigenvector sign: dominant loading is positive.
+        if v[int(np.argmax(np.abs(v)))] < 0:
+            v = -v
+        share = v**2  # sums to 1 across all names
+        idx = np.argsort(share)[::-1]
+
+        members: list[dict] = []
+        cum = 0.0
+        for rank, i in enumerate(idx):
+            members.append(
+                {
+                    "symbol": symbols[int(i)],
+                    "loading": round(float(v[i]), 4),
+                    "weight": round(float(share[i]), 4),
+                }
+            )
+            cum += float(share[i])
+            if rank + 1 >= 2 and (cum >= cum_threshold or rank + 1 >= max_members):
+                break
+        return members
+
+    # ── Metric 5: weight entropy -> effective number of positions ────────────
+    @staticmethod
+    def _weight_entropy(w: np.ndarray, n: int) -> tuple[float, float, float]:
+        """H = -Σ w_i ln w_i ; effective_positions = exp(H) ; normalized = H/ln(N)."""
+        H = float(-np.sum(w * np.log(w)))  # every held weight is > 0
+        eff_positions = float(np.exp(H))
+        norm_entropy = float(H / math.log(n)) if n > 1 else 0.0
+        return H, eff_positions, norm_entropy

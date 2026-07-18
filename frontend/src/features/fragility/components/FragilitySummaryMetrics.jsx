@@ -1,5 +1,10 @@
-import { LineChart, Line, ResponsiveContainer } from "recharts";
 import MetricCard from "../../../components/ui/MetricCard";
+
+function drTone(dr) {
+  if (dr >= 1.6) return "positive";
+  if (dr >= 1.25) return "warning";
+  return "negative";
+}
 
 function enbTone(enb) {
   if (enb >= 6) return "positive";
@@ -7,95 +12,73 @@ function enbTone(enb) {
   return "negative";
 }
 
-function regimeTone(label) {
-  if (label === "LOW") return "positive";
-  if (label === "RISING") return "warning";
+function gapTone(gap) {
+  if (gap <= 1.5) return "positive";
+  if (gap <= 2.5) return "warning";
   return "negative";
 }
 
-function corrTone(c) {
-  if (c < 0.35) return "positive";
-  if (c <= 0.6) return "warning";
+function volTone(vol) {
+  if (vol < 0.2) return "positive";
+  if (vol < 0.35) return "warning";
   return "negative";
 }
 
-export default function FragilitySummaryMetrics({ data }) {
+const TONE_COLOR = {
+  positive: "var(--color-profit)",
+  warning: "var(--color-warning)",
+  negative: "var(--color-loss)",
+};
+
+function StripStat({ label, value, sub, color }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="label">{label}</span>
+      <span className="font-mono text-[1.05rem] font-semibold leading-none tabular-nums" style={color ? { color } : undefined}>
+        {value}
+        {sub ? <span className="ml-1.5 text-[0.7rem] font-normal text-[var(--color-text-faint)]">{sub}</span> : null}
+      </span>
+    </div>
+  );
+}
+
+export default function FragilitySummaryMetrics({ scalars, maxPair, maxCorr }) {
   const {
+    num_positions = 0,
+    diversification_ratio = 0,
     enb = 0,
-    enb_new = 0,
-    regime_label = "LOW",
-    stress_loss_pct = 0,
-    stress_loss_new_pct = 0,
-    mean_corr_long = 0,
-    enb_history = [],
-  } = data;
+    effective_positions = 0,
+    concentration_gap = 0,
+    portfolio_vol = 0,
+    avg_correlation = 0,
+  } = scalars;
 
-  const sparkData = enb_history.map((v, i) => ({ i, v }));
-  // Sparkline is red if ENB is lower than 5 steps ago, green otherwise
-  const enbFalling =
-    enb_history.length >= 6 &&
-    enb_history[enb_history.length - 1] < enb_history[enb_history.length - 6];
-  const sparkColor = enbFalling ? "var(--loss)" : "var(--profit)";
+  // Share of apparent (position-count) diversification that is illusory once
+  // correlation is accounted for: 1 - ENB/effective_positions = 1 - 1/gap.
+  const illusoryPct =
+    concentration_gap > 0 ? Math.max(0, (1 - 1 / concentration_gap) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-[var(--space-4)]">
-      {/* 4 metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-[var(--space-3)]">
-        <MetricCard
-          label="Effective Bets"
-          value={enb.toFixed(1)}
-          tone={enbTone(enb)}
-        />
-        <MetricCard
-          label="Regime"
-          value={regime_label}
-          tone={regimeTone(regime_label)}
-        />
-        <MetricCard
-          label="Stress Loss (99% VaR)"
-          value={`${stress_loss_pct.toFixed(1)}%`}
-          tone="negative"
-        />
-        <MetricCard
-          label="Avg Correlation"
-          value={mean_corr_long.toFixed(3)}
-          tone={corrTone(mean_corr_long)}
-        />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <MetricCard label="Diversification Ratio" value={diversification_ratio.toFixed(2)} tone={drTone(diversification_ratio)} detail="w·σ ÷ σₚ" />
+        <MetricCard label="Effective Bets" value={enb.toFixed(2)} tone={enbTone(enb)} detail={`PCA-ENB · ${num_positions} names`} />
+        <MetricCard label="Effective Positions" value={effective_positions.toFixed(2)} tone="neutral" detail="weight entropy" />
+        <MetricCard label="Concentration Gap" value={concentration_gap.toFixed(2)} suffix="×" tone={gapTone(concentration_gap)} detail="positions ÷ bets" />
+        <MetricCard label="Portfolio Vol" value={(portfolio_vol * 100).toFixed(1)} suffix="%" tone={volTone(portfolio_vol)} detail="annualized" />
       </div>
 
-      {/* ENB sparkline — only shown when we have history */}
-      {sparkData.length > 1 && (
-        <div style={{ width: 200, height: 40 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparkData}>
-              <Line
-                type="monotone"
-                dataKey="v"
-                stroke={sparkColor}
-                strokeWidth={1.5}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Trim summary line */}
-      <p
-        className="text-[var(--text-3)]"
-        style={{ fontSize: "var(--text-xs)" }}
-      >
-        After applying trim suggestions: ENB{" "}
-        <span className="text-[var(--text-1)]">{enb.toFixed(1)}</span>
-        {" → "}
-        <span className="text-[var(--profit)]">{enb_new.toFixed(1)}</span>
-        {"  ·  Stress loss "}
-        <span className="text-[var(--text-1)]">{stress_loss_pct.toFixed(1)}%</span>
-        {" → "}
-        <span style={{ color: stress_loss_new_pct < stress_loss_pct ? "var(--profit)" : "var(--loss)" }}>
-          {stress_loss_new_pct.toFixed(1)}%
-        </span>
-      </p>
+      <div className="flex flex-wrap items-center gap-x-10 gap-y-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-4 py-3.5">
+        <StripStat
+          label="Diversification Illusory"
+          value={`${illusoryPct.toFixed(0)}%`}
+          color={TONE_COLOR[gapTone(concentration_gap)]}
+        />
+        {maxPair && maxPair.length === 2 ? (
+          <StripStat label="Most-Correlated Pair" value={`${maxPair[0]} × ${maxPair[1]}`} sub={`ρ ${maxCorr.toFixed(2)}`} />
+        ) : null}
+        <StripStat label="Average ρ" value={avg_correlation.toFixed(2)} />
+      </div>
     </div>
   );
 }
