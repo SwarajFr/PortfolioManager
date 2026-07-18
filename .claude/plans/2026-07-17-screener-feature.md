@@ -18,6 +18,7 @@
 - **Screens read ONLY the cache.** `run_individual`/`run_combined`/scan/individual endpoints must issue zero Kite calls.
 - `routes.py` uses a bare `APIRouter()`; the `/api/screener` prefix is added in `main.py`.
 - Frontend: `apiClient` is a **named export** (`import { apiClient }`). Do NOT touch Portfolio/Exit/Fragility components. Styling is Tailwind v4 with `var(--color-*)` refs.
+- Frontend lint: this repo's ESLint uses `eslint-plugin-react-hooks` v7 flat-recommended, which enforces **`react-hooks/set-state-in-effect` as an ERROR** — no synchronous `setState` inside a `useEffect` body. Load data via the repo's `useAsyncData` hook (it dispatches through `useReducer`, which is allowed) and derive values during render instead of syncing them with an effect. `npm run lint` must pass with zero errors.
 - Strategy defaults: MA `fast=20,slow=50`; Momentum `lookback=252,skip=21`; Breakout `n_high=20`; RSI `rsi_period=14,oversold=30`; 52w `window=252,proximity=0.90`. Screener: `default_k="all"`, weights equal, `fallback_n=10`, `normalization="percentile"`. Universe: `segment="NSE-EQ"`, NSE500 membership from static CSV. Data: `cache_backend="sqlite"`, `seed_lookback_days=500`, `kite_rate_limit_rps=3.0`.
 
 ---
@@ -1717,44 +1718,36 @@ git commit -m "feat(screener): frontend service, nav entry, page shell"
 The table uses the codebase's composable primitives (`TableShell`/`TableHeader`/`TableRow` with a shared `GRID` template) — there is no `columns`/`rows` prop API. Pattern taken from `features/portfolio/components/ConcentrationTable.jsx`.
 
 ```jsx
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Card from "../../../components/ui/Card";
 import { TableHeader, TableRow, TableShell } from "../../../components/ui/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
+import { useAsyncData } from "../../../hooks/useAsyncData";
 import { useStrategies } from "../hooks/useScreener";
 import { getIndividual } from "../../../services/screenerService";
 
 const GRID = "grid-cols-[0.5fr_2fr_1fr] gap-4 items-center";
 
 export default function StrategiesPanel() {
-  const { data: meta } = useStrategies();
+  const { data: meta, loading: metaLoading } = useStrategies();
   const strategies = meta?.strategies ?? [];
   const [selected, setSelected] = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // Derive the active strategy during render (defaults to the first) instead of
+  // syncing it via an effect — keeps this component free of set-state-in-effect.
+  const active = selected || strategies[0]?.name || "";
 
-  useEffect(() => {
-    if (!selected && strategies.length) setSelected(strategies[0].name);
-  }, [selected, strategies]);
-
-  useEffect(() => {
-    if (!selected) return;
-    let cancelled = false;
-    setLoading(true);
-    getIndividual(selected)
-      .then((res) => !cancelled && setResults(res.results ?? []))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
+  const { data, loading } = useAsyncData(
+    useCallback(() => getIndividual(active), [active]),
+    { errorMessage: "Failed to load strategy results", enabled: Boolean(active) },
+  );
+  const results = data?.results ?? [];
 
   return (
     <Card className="p-4">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="label">Strategy</span>
         <select
-          value={selected}
+          value={active}
           onChange={(e) => setSelected(e.target.value)}
           className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-1 font-mono text-xs text-[var(--color-text)]"
         >
@@ -1766,12 +1759,12 @@ export default function StrategiesPanel() {
         </select>
       </div>
 
-      {loading ? (
+      {metaLoading || loading ? (
         <p className="label">Loading…</p>
       ) : results.length === 0 ? (
         <EmptyState title="No passing stocks" description="No symbols pass this strategy yet." />
       ) : (
-        <TableShell title={`Passing · ${selected}`}>
+        <TableShell title={`Passing · ${active}`}>
           <TableHeader className={GRID}>
             <div>#</div>
             <div>Symbol</div>
@@ -1818,7 +1811,7 @@ git commit -m "feat(screener): Strategies panel with raw-score ranking"
 Results use the same `TableShell`/`TableHeader`/`TableRow` primitives as Task 10 (no `columns`/`rows` prop API).
 
 ```jsx
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Card from "../../../components/ui/Card";
 import { TableHeader, TableRow, TableShell } from "../../../components/ui/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
@@ -1830,22 +1823,20 @@ const RESULT_GRID = "grid-cols-[0.5fr_2fr_1fr_1fr] gap-4 items-center";
 export default function ScreenerPanel() {
   const { data: meta } = useStrategies();
   const strategies = meta?.strategies ?? [];
-  const [selected, setSelected] = useState({});
-  const [weights, setWeights] = useState({});
+
+  // Derive selected/weights during render (default: all selected, equal weight).
+  // User edits are stored as overrides, so no set-state-in-effect is needed.
+  const [selectedOverride, setSelectedOverride] = useState(null);
+  const [weightsOverride, setWeightsOverride] = useState(null);
+  const selected =
+    selectedOverride ?? Object.fromEntries(strategies.map((s) => [s.name, true]));
+  const weights =
+    weightsOverride ?? Object.fromEntries(strategies.map((s) => [s.name, 1]));
+
   const [k, setK] = useState("all");
   const [fallbackN, setFallbackN] = useState(10);
   const [scan, setScan] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // Pre-fill equal weights + all strategies selected once metadata loads.
-  useEffect(() => {
-    if (strategies.length && Object.keys(selected).length === 0) {
-      const all = Object.fromEntries(strategies.map((s) => [s.name, true]));
-      const eq = Object.fromEntries(strategies.map((s) => [s.name, 1]));
-      setSelected(all);
-      setWeights(eq);
-    }
-  }, [strategies, selected]);
 
   const chosen = strategies.filter((s) => selected[s.name]).map((s) => s.name);
 
@@ -1875,7 +1866,9 @@ export default function ScreenerPanel() {
                 <input
                   type="checkbox"
                   checked={!!selected[s.name]}
-                  onChange={(e) => setSelected({ ...selected, [s.name]: e.target.checked })}
+                  onChange={(e) =>
+                    setSelectedOverride({ ...selected, [s.name]: e.target.checked })
+                  }
                 />
                 {s.name}
               </label>
@@ -1883,7 +1876,9 @@ export default function ScreenerPanel() {
                 type="number"
                 step="0.1"
                 value={weights[s.name] ?? 1}
-                onChange={(e) => setWeights({ ...weights, [s.name]: e.target.value })}
+                onChange={(e) =>
+                  setWeightsOverride({ ...weights, [s.name]: e.target.value })
+                }
                 disabled={!selected[s.name]}
                 className="w-20 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-2 py-1 font-mono text-xs disabled:opacity-40"
               />
@@ -1930,7 +1925,13 @@ export default function ScreenerPanel() {
           <div className="mb-3 flex items-center gap-3">
             <h2 className="label">Results</h2>
             {scan.is_fallback && (
-              <span className="rounded-[var(--radius-sm)] bg-[var(--color-warning)]/15 px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.1em] text-[var(--color-warning)]">
+              <span
+                className="rounded-[var(--radius-sm)] px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.1em] text-[var(--color-warning)]"
+                style={{
+                  backgroundColor:
+                    "color-mix(in srgb, var(--color-warning) 15%, transparent)",
+                }}
+              >
                 Fallback · no true matches — showing top {scan.results.length} by aggregate
               </span>
             )}
@@ -1962,7 +1963,7 @@ export default function ScreenerPanel() {
 }
 ```
 
-Note: `--color-warning` is a raw CSS variable, so the `bg-[var(--color-warning)]/15` opacity shorthand may not apply an alpha under Tailwind v4. If the tint doesn't render, use an inline `style={{ backgroundColor: "color-mix(in srgb, var(--color-warning) 15%, transparent)" }}` on the badge instead.
+Note: the fallback badge tints its background with an inline `color-mix(in srgb, var(--color-warning) 15%, transparent)` rather than Tailwind's `/15` alpha shorthand, which does not reliably apply an alpha to a raw CSS variable under Tailwind v4.
 
 - [ ] **Step 2: Verify build + lint + visual**
 
