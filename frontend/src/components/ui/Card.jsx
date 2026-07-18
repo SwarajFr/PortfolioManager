@@ -1,11 +1,12 @@
 import { cn } from "../../utils/classNames";
 
+/** Flat surface panel used across the dashboard. */
 export default function Card({ children, className = "", interactive = false }) {
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--surface)]",
-        interactive && "transition-colors duration-150 hover:bg-[var(--surface-1)]",
+        "rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]",
+        interactive && "transition duration-[var(--duration-fast)] hover:border-[var(--color-border-strong)]",
         className,
       )}
     >

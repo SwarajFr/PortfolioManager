@@ -17,4 +17,10 @@ export const NAV_ITEMS = [
     eyebrow: "Quant Lab",
     description: "Correlation clusters, ENB, and stress diagnostics",
   },
+  {
+    id: "screener",
+    label: "Screener",
+    eyebrow: "Signals",
+    description: "Multi-strategy NSE500 stock screener",
+  },
 ];

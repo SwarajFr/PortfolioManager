@@ -1,6 +1,6 @@
 import { apiClient } from "./apiClient";
 
-export async function getFragilityOverview() {
-  const { data } = await apiClient.get("/fragility/overview");
+export async function getFragilityAnalysis() {
+  const { data } = await apiClient.get("/fragility/analysis");
   return data;
 }

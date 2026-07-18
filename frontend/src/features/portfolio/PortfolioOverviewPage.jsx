@@ -26,12 +26,7 @@ export default function PortfolioOverviewPage() {
   }, [refresh]);
 
   if (loading) {
-    return (
-      <LoadingState
-        title="Loading allocation book"
-        description="Fetching holdings, P&L, concentration checks, and rebalance bands."
-      />
-    );
+    return <LoadingState title="Loading holdings" />;
   }
 
   if (!data) {
@@ -39,12 +34,8 @@ export default function PortfolioOverviewPage() {
   }
 
   return (
-    <PageShell
-      eyebrow="Portfolio Overview"
-      title="Allocation control room for live holdings."
-      description="Monitor current exposure, unrealized P&L, target drift, and concentration risk from a single dense workspace."
-    >
-      <div className="space-y-6">
+    <PageShell eyebrow="Portfolio" title="Overview">
+      <div className="space-y-5">
         <PortfolioMetrics health={data.health} />
         <AllocationTable rows={data.allocation || []} />
         <ConcentrationTable rows={data.concentration || []} />

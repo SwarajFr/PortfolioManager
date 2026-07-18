@@ -5,11 +5,10 @@ export default function AppShell({ activeView, children, onViewChange }) {
   const activeItem = NAV_ITEMS.find((item) => item.id === activeView) || NAV_ITEMS[0];
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-dashboard text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,rgba(10,10,11,0.98),rgba(10,10,11,1))]" />
-      <div className="relative flex min-h-screen flex-col overflow-hidden">
+    <div className="flex min-h-screen bg-dashboard text-[var(--color-text)]">
+      <div className="flex min-h-screen w-full flex-col lg:flex-row">
         <TopBar activeItem={activeItem} onViewChange={onViewChange} />
-        <main className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+        <main className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {children}
         </main>
       </div>

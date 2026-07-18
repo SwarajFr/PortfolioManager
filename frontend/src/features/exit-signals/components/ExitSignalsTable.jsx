@@ -16,10 +16,10 @@ const GRID = "grid-cols-[44px_1fr_112px_112px_96px_86px_56px_56px_56px_56px_56px
 
 function getKpiClass(value, max) {
   const ratio = Number(value || 0) / max;
-  if (ratio >= 0.7) return "text-rose-300";
-  if (ratio >= 0.4) return "text-orange-300";
-  if (ratio > 0) return "text-amber-300";
-  return "text-slate-500";
+  if (ratio >= 0.7) return "text-[var(--loss)]";
+  if (ratio >= 0.4) return "text-[var(--warning)]";
+  if (ratio > 0) return "text-[var(--color-text)]";
+  return "text-[var(--color-text-faint)]";
 }
 
 export default function ExitSignalsTable({ signals }) {
@@ -63,10 +63,7 @@ export default function ExitSignalsTable({ signals }) {
   );
 
   return (
-    <TableShell
-      title="Exit / Trim Recommendations"
-      description="Sortable scoring grid across loss, risk, efficiency, trend, and concentration factors."
-    >
+    <TableShell title="Exit / Trim Recommendations">
       <TableHeader className={GRID}>
         <div>#</div>
         {header("Stock", "symbol")}
@@ -85,12 +82,12 @@ export default function ExitSignalsTable({ signals }) {
 
       {sortedSignals.map((signal, index) => (
         <TableRow key={signal.symbol} className={GRID}>
-          <div className="font-mono text-xs text-slate-500">{index + 1}</div>
-          <div className="truncate font-mono font-semibold text-slate-100">{signal.symbol}</div>
-          <div className="text-right font-mono tabular-nums text-slate-400">{formatINR(signal.invested)}</div>
+          <div className="font-mono text-xs text-[var(--color-text-faint)]">{index + 1}</div>
+          <div className="truncate font-mono font-semibold text-[var(--color-text)]">{signal.symbol}</div>
+          <div className="text-right font-mono tabular-nums text-[var(--color-text-muted)]">{formatINR(signal.invested)}</div>
           <div className="text-right font-mono tabular-nums">{formatINR(signal.value)}</div>
           <div className="text-right font-mono tabular-nums">{formatINR(signal.ltp)}</div>
-          <div className={`text-right font-mono tabular-nums ${signal.return_pct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+          <div className={`text-right font-mono tabular-nums ${signal.return_pct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]"}`}>
             {formatPercent(signal.return_pct, 2, { signed: true })}
           </div>
           {KPI_COLUMNS.map((column) => (

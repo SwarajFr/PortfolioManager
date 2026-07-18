@@ -3,15 +3,15 @@ export const TONE_STYLES = {
   negative: "text-[var(--loss)]",
   warning: "text-[var(--warning)]",
   danger: "text-[var(--loss)]",
-  info: "text-[var(--accent)]",
+  info: "text-[var(--color-info)]",
   neutral: "text-[var(--text-1)]",
 };
 
 export const BADGE_STYLES = {
-  positive: "border-[var(--profit)] bg-[rgba(0,212,161,0.12)] text-[var(--profit)]",
-  negative: "border-[var(--loss)] bg-[rgba(255,69,96,0.12)] text-[var(--loss)]",
-  warning: "border-[var(--warning)] bg-[rgba(245,166,35,0.12)] text-[var(--warning)]",
-  danger: "border-[var(--loss)] bg-[rgba(255,69,96,0.12)] text-[var(--loss)]",
-  info: "border-[var(--accent)] bg-[rgba(0,212,255,0.12)] text-[var(--accent)]",
-  neutral: "border-[var(--text-3)] bg-[rgba(61,61,77,0.12)] text-[var(--text-3)]",
+  positive: "border-[rgba(49,208,123,0.35)] bg-[rgba(49,208,123,0.1)] text-[var(--profit)]",
+  negative: "border-[rgba(250,82,82,0.35)] bg-[rgba(250,82,82,0.1)] text-[var(--loss)]",
+  warning: "border-[rgba(224,165,46,0.38)] bg-[rgba(224,165,46,0.1)] text-[var(--warning)]",
+  danger: "border-[rgba(250,82,82,0.42)] bg-[rgba(250,82,82,0.12)] text-[var(--loss)]",
+  info: "border-[rgba(56,189,248,0.35)] bg-[rgba(56,189,248,0.1)] text-[var(--color-info)]",
+  neutral: "border-[var(--color-border-strong)] bg-[var(--color-surface-soft)] text-[var(--color-text-muted)]",
 };

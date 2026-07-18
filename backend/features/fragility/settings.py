@@ -1,14 +1,18 @@
-DEFAULT = {
-    "short_window_days": 90,
-    "long_window_days": 252,
-    "diversification_ema_span": 7,
-    "cluster_corr_threshold": 0.6,
-    "small_portfolio_holdings": 8,
-    "cash_skip_threshold": 0.8,
-    "missing_data_warning_weight": 0.10,
-    "regime_chart_points": 30,
+from core.settings_store import load_settings, save_settings, reset_settings
+
+_TABLE = "fragility_settings"
+_DEFAULTS = {
+    "long_window": 90,
 }
 
 
-def get_settings():
-    return DEFAULT.copy()
+def get_settings() -> dict:
+    return load_settings(_TABLE, _DEFAULTS)
+
+
+def save_fragility_settings(data: dict) -> None:
+    save_settings(_TABLE, {**_DEFAULTS, **data})
+
+
+def reset_fragility_settings() -> dict:
+    return reset_settings(_TABLE, _DEFAULTS)

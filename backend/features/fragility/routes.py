@@ -1,10 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from .service import get_fragility_overview
+from .service import get_diversity_analysis
 
 router = APIRouter()
 
 
-@router.get("/overview")
-def fragility_overview():
-    return get_fragility_overview()
+@router.get("/analysis")
+async def analysis():
+    try:
+        return get_diversity_analysis()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

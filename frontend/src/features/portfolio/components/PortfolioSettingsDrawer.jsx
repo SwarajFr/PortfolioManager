@@ -11,7 +11,7 @@ import {
 } from "../../../services/portfolioService";
 
 const inputClass =
-  "w-full rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] px-3 py-2 font-mono text-[10px] text-[var(--text-1)] outline-none transition focus:border-[var(--text-2)]";
+  "w-full rounded-[var(--radius-sm)] border border-[var(--border-1)] bg-[var(--surface)] px-3 py-2 font-mono text-[var(--text-xs)] text-[var(--text-1)] outline-none transition focus:border-[var(--accent)]";
 
 function cloneConfig(config) {
   return structuredClone(config);
@@ -70,7 +70,7 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
   if (!config) {
     return (
       <Drawer onClose={onClose} title="Overview Settings">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 text-sm text-slate-400">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-5 text-sm text-[var(--text-2)]">
           Loading settings...
         </div>
       </Drawer>
@@ -197,15 +197,15 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
       <div className="space-y-5">
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Assign Stocks To Groups</h3>
+            <h3 className="font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-2)]">Assign stocks to groups</h3>
             {unassignedCount > 0 ? <StatusBadge tone="warning">{unassignedCount} open</StatusBadge> : null}
           </div>
 
           {unassignedCount > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[var(--text-2)]">
               <span>Quick assign all unassigned to</span>
               <select
-                className="rounded-[3px] border border-[var(--border-1)] bg-[var(--surface)] px-2 py-1 font-mono text-[10px] text-[var(--text-1)]"
+                className="rounded-[var(--radius-sm)] border border-[var(--border-1)] bg-[var(--surface)] px-2 py-1 font-mono text-[var(--text-xs)] text-[var(--text-1)]"
                 defaultValue=""
                 onChange={(event) => {
                   if (event.target.value) assignAllUnassigned(event.target.value);
@@ -231,7 +231,7 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
             value={filter}
           />
 
-          <div className="mt-4 grid grid-cols-2 border-b border-[var(--border)] pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-3)]">
+          <div className="mt-4 grid grid-cols-2 border-b border-[var(--border)] pb-2 font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-3)]">
             <div>Symbol</div>
             <div>Group</div>
           </div>
@@ -243,17 +243,17 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
               return (
                 <div
                   key={symbol}
-                  className={`grid grid-cols-2 items-center gap-3 rounded-[3px] px-2 py-2 ${
-                    isUnassigned ? "bg-[rgba(245,166,35,0.12)]" : "hover:bg-[var(--surface-1)]"
+                  className={`grid grid-cols-2 items-center gap-3 rounded-[var(--radius-sm)] px-2 py-2 ${
+                    isUnassigned ? "bg-[rgba(242,184,75,0.12)]" : "hover:bg-[var(--surface-1)]"
                   }`}
                 >
                   <span className={`font-mono text-sm ${isUnassigned ? "text-[var(--warning)]" : "text-[var(--text-1)]"}`}>
                     {symbol}
                   </span>
                   <select
-                    className={`rounded-[3px] border px-2 py-1.5 font-mono text-[10px] ${
+                    className={`rounded-[var(--radius-sm)] border px-2 py-1.5 font-mono text-[var(--text-xs)] ${
                       isUnassigned
-                        ? "border-[rgba(245,166,35,0.4)] text-[var(--warning)] bg-[var(--surface)]"
+                        ? "border-[rgba(242,184,75,0.4)] text-[var(--warning)] bg-[var(--surface)]"
                         : "border-[var(--border-1)] text-[var(--text-1)] bg-[var(--surface)]"
                     }`}
                     onChange={(event) => assignStock(symbol, event.target.value)}
@@ -273,7 +273,7 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
         </Card>
 
         <Card className="space-y-3 p-4">
-          <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Manage Groups</h3>
+          <h3 className="font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-2)]">Manage groups</h3>
           {groupNames.map((group) => (
             <div key={group} className="flex items-center gap-2">
               <input className={inputClass} onChange={(event) => renameGroup(group, event.target.value)} value={group} />
@@ -283,7 +283,7 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
               </Button>
             </div>
           ))}
-          <div className="flex gap-2 border-t border-slate-800 pt-3">
+          <div className="flex gap-2 border-t border-[var(--border)] pt-3">
             <input
               className={inputClass}
               onChange={(event) => setNewGroup(event.target.value)}
@@ -298,8 +298,8 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
         </Card>
 
         <Card className="space-y-3 p-4">
-          <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Allocation Targets</h3>
-          <div className="grid grid-cols-3 gap-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-3)]">
+          <h3 className="font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-2)]">Allocation targets</h3>
+          <div className="grid grid-cols-3 gap-3 font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-3)]">
             <div>Group</div>
             <div className="text-center">Min %</div>
             <div className="text-center">Max %</div>
@@ -314,7 +314,7 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
         </Card>
 
         <Card className="space-y-4 p-4">
-          <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-2)]">Concentration Limits</h3>
+          <h3 className="font-mono text-[var(--text-xs)] font-semibold tracking-[0.04em] text-[var(--text-2)]">Concentration limits</h3>
           {[
             ["top5", "Top 5 Holdings Limit"],
             ["single", "Single Stock Limit"],

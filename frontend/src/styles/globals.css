@@ -1,35 +1,98 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
 
 @layer base {
   :root {
     color-scheme: dark;
-    font-family: "JetBrains Mono", monospace;
-    --bg: #0a0a0b;
-    --surface: #111114;
-    --surface-1: #18181c;
-    --border: #1f1f26;
-    --border-1: #2a2a35;
-    --profit: #00d4a1;
-    --loss: #ff4560;
-    --warning: #f5a623;
-    --accent: #00d4ff;
-    --watch: #7b68ee;
-    --neutral: #2a2a35;
-    --text-1: #e8e8f0;
-    --text-2: #6b7280;
-    --text-3: #3d3d4d;
-    --font-mono: "JetBrains Mono", monospace;
-    --font-data: "IBM Plex Mono", monospace;
+    font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+
+    /* Blacked-out trading terminal: pure-black canvas, hairline structure,
+       amber system accent, semantic green/red/cyan for data only. */
+    --color-bg: #000000;
+    --color-bg-elevated: #08090b;
+    --color-rail: #050506;
+    --color-surface: #0c0d10;
+    --color-surface-strong: #131519;
+    --color-surface-soft: rgba(255, 255, 255, 0.028);
+    --color-surface-hover: rgba(255, 255, 255, 0.045);
+    --color-border: rgba(255, 255, 255, 0.07);
+    --color-border-strong: rgba(255, 255, 255, 0.14);
+    --color-profit: #31d07b;
+    --color-loss: #fa5252;
+    --color-warning: #e0a52e;
+    --color-accent: #f5a623;
+    --color-info: #38bdf8;
+    --color-watch: #8b9099;
+    --color-neutral: rgba(139, 144, 153, 0.16);
+    --color-text: #eceef1;
+    --color-text-muted: #868b93;
+    --color-text-faint: #565b64;
+
+    /* Legacy aliases retained so existing presentation-only code keeps working. */
+    --bg: var(--color-bg);
+    --surface: var(--color-surface);
+    --surface-1: var(--color-surface-strong);
+    --surface-2: var(--color-surface-strong);
+    --border: var(--color-border);
+    --border-1: var(--color-border-strong);
+    --border-subtle: var(--color-border);
+    --profit: var(--color-profit);
+    --loss: var(--color-loss);
+    --warning: var(--color-warning);
+    --accent: var(--color-accent);
+    --watch: var(--color-watch);
+    --neutral: var(--color-neutral);
+    --text-1: var(--color-text);
+    --text-2: var(--color-text-muted);
+    --text-3: var(--color-text-faint);
+
+    /* Typography — Archivo for labels/headings, JetBrains Mono for all data. */
+    --font-display: "Archivo", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Archivo", "Segoe UI", system-ui, sans-serif;
+    --font-data: "JetBrains Mono", ui-monospace, monospace;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --text-xs: 0.72rem;
+    --text-sm: 0.8125rem;
+    --text-md: 0.9375rem;
+    --text-lg: 1.0625rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-display: 1.5rem;
+
+    /* Spacing, radius, motion — square, crisp, flat. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --radius-sm: 2px;
+    --radius-md: 3px;
+    --radius-lg: 4px;
+    --radius-xl: 6px;
+    --shadow-card: none;
+    --shadow-glow: none;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-fast: 140ms;
+    --duration-med: 240ms;
   }
 
   html {
-    background: var(--bg);
+    background: var(--color-bg);
   }
 
   body {
-    @apply bg-[#0a0a0b] text-[var(--text-1)];
+    color: var(--color-text);
+    background: var(--color-bg);
     min-width: 320px;
+    font-family: var(--font-body);
   }
 
   * {
@@ -38,8 +101,13 @@
   }
 
   ::selection {
-    background: rgba(0, 212, 255, 0.2);
-    color: var(--text-1);
+    background: rgba(245, 166, 35, 0.26);
+    color: var(--color-text);
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   button,
@@ -51,38 +119,108 @@
   select,
   textarea {
     font: inherit;
+    color-scheme: dark;
+  }
+
+  /* Thin terminal scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+    background-clip: content-box;
   }
 }
 
 @layer utilities {
   .bg-dashboard {
-    background: var(--bg);
+    background: var(--color-bg);
   }
 
   .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .font-data {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Override Tailwind's default mono so every ticker/number uses the data face
+     with aligned tabular figures. */
+  .font-mono {
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Uppercase tracked micro-label — the terminal's field caption. */
+  .label {
+    font-family: var(--font-data);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
   }
 
   .terminal-toast {
-    border: 1px solid var(--border) !important;
-    background: var(--surface) !important;
-    color: var(--text-1) !important;
+    border: 1px solid var(--color-border-strong) !important;
+    background: var(--color-surface-strong) !important;
+    color: var(--color-text) !important;
+    border-radius: var(--radius-md) !important;
+    font-family: var(--font-data) !important;
+    font-size: var(--text-xs) !important;
   }
 
   .pill {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    padding: 3px 8px;
-    border-radius: 3px;
-    border: 1px solid currentColor;
+    font-family: var(--font-data);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid currentColor;
     cursor: default;
   }
 
-  .pill:hover {
-    box-shadow: 0 0 8px currentColor;
-    opacity: 0.85;
+  .numeric {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @keyframes scan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(320%);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }

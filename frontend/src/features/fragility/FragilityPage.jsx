@@ -1,59 +1,66 @@
-import EmptyState from "../../components/ui/EmptyState";
-import LoadingState from "../../components/ui/LoadingState";
+import { useFragilityAnalysis } from "./hooks/useFragilityOverview";
 import PageShell from "../../components/layout/PageShell";
-import { buildFragilityMetrics } from "./lib/fragilityMetrics";
-import FragilityHero from "./components/FragilityHero";
+import Card from "../../components/ui/Card";
+import LoadingState from "../../components/ui/LoadingState";
+import EmptyState from "../../components/ui/EmptyState";
 import FragilitySummaryMetrics from "./components/FragilitySummaryMetrics";
-import FragilityEnbPanel from "./components/FragilityEnbPanel";
+import PrincipalBetsBars from "./components/PrincipalBetsBars";
 import FragilityHeatmap from "./components/FragilityHeatmap";
-import { useFragilityOverview } from "./hooks/useFragilityOverview";
-import { useEffect } from "react";
 
 export default function FragilityPage() {
-  const { data, loading, refresh } = useFragilityOverview();
+  const { data, loading, error } = useFragilityAnalysis();
 
-  useEffect(() => {
-    const handleRefresh = () => refresh();
-    window.addEventListener("dashboard:refresh", handleRefresh);
-    return () => window.removeEventListener("dashboard:refresh", handleRefresh);
-  }, [refresh]);
+  if (loading) return <LoadingState title="Measuring diversification" />;
+  if (error) return <EmptyState title="Error" description={error} />;
+  if (!data) return null;
 
-  if (loading) {
+  const scalars = data.scalars ?? {};
+  const excluded = data.tickers_excluded ?? [];
+
+  if (!scalars.num_positions) {
     return (
-      <LoadingState
-        title="Building fragility model"
-        description="Fetching historical windows, shrinkage covariance, clusters, ENB, stress regime, and action evidence."
-      />
+      <PageShell eyebrow="Quant Lab" title="Fragility & Diversification">
+        <EmptyState
+          title="Not enough data"
+          description={
+            excluded.length
+              ? `Need ≥ 2 holdings with sufficient price history. Excluded: ${excluded.join(", ")}`
+              : "Connect holdings with enough price history to compute diversification metrics."
+          }
+        />
+      </PageShell>
     );
   }
 
-  if (!data) {
-    return <EmptyState actionLabel="Retry" onAction={refresh} title="Fragility analysis unavailable" />;
-  }
-
-  const summary = data.summary || {};
-  const evidence = data.evidence || {};
-  const metrics = buildFragilityMetrics(summary, data.why?.metrics || []);
-  const alertAction = data.hero?.actions?.[0] || null;
-
   return (
-    <PageShell
-      eyebrow="Portfolio Fragility"
-      title="Correlation structure, independent bets, and stress compression."
-      description="Action-first diversification analysis built from Ledoit-Wolf shrinkage covariance, cluster exposure, and effective number of bets."
-    >
-      <div className="space-y-6">
-        {alertAction ? <FragilityHero hero={data.hero || {}} summary={summary} /> : null}
-        {metrics.length ? <FragilitySummaryMetrics metrics={metrics.slice(0, 4)} /> : null}
+    <PageShell eyebrow="Quant Lab" title="Fragility & Diversification">
+      <div className="flex flex-col gap-5">
+        <FragilitySummaryMetrics
+          scalars={scalars}
+          maxPair={data.max_correlation_pair}
+          maxCorr={scalars.max_correlation ?? 0}
+        />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <FragilityEnbPanel
-            gauge={evidence.gauge}
-            summary={summary}
-            enbRows={evidence.enb_breakdown || []}
-          />
-          <FragilityHeatmap heatmap={evidence.matrix || evidence.heatmap} />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+          <Card className="p-4">
+            <h2 className="label mb-3">Correlation Matrix</h2>
+            <FragilityHeatmap correlation={data.correlation} />
+          </Card>
+
+          <Card className="p-4">
+            <h2 className="label mb-4">Principal Risk Bets</h2>
+            <PrincipalBetsBars
+              contributions={data.principal_risk_contributions ?? []}
+              bets={data.principal_bets ?? []}
+            />
+          </Card>
         </div>
+
+        {excluded.length > 0 && (
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+            Excluded · {excluded.join(", ")}
+          </p>
+        )}
       </div>
     </PageShell>
   );
