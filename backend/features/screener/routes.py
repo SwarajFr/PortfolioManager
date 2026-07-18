@@ -24,12 +24,15 @@ def individual(strategy: str):
 @router.post("/scan")
 async def scan(request: Request):
     body = await request.json() if await request.body() else {}
-    return run_scan(
-        strategies=body.get("strategies"),
-        weights=body.get("weights"),
-        k=body.get("k"),
-        fallback_n=body.get("fallback_n"),
-    )
+    try:
+        return run_scan(
+            strategies=body.get("strategies"),
+            weights=body.get("weights"),
+            k=body.get("k"),
+            fallback_n=body.get("fallback_n"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/refresh")

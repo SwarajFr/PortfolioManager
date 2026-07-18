@@ -346,3 +346,58 @@ def test_routes_module_exposes_all_endpoints():
 
     paths = {r.path for r in screener_routes.router.routes}
     assert paths == {"/strategies", "/individual", "/scan", "/refresh", "/status"}
+
+
+# ── Post-review hardening ────────────────────────────────────────────────────
+def test_run_scan_unknown_strategy_raises_value_error(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+    _seed_signals(db)
+    # A misspelled / unregistered strategy is a client error, not a 500.
+    with pytest.raises(ValueError):
+        screener_service.run_scan(strategies=["ma_crossover", "momentum"])  # typo
+
+
+def test_run_scan_drops_registered_but_uncached_strategy(db, monkeypatch):
+    s = screener_settings.get_settings()
+    s["data"]["cache_path"] = db
+    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+    # Only ma_crossover cached — simulates a registered strategy not yet seeded.
+    screener_cache.upsert_signal(db, "AAA", "2026-01-03",
+                                 {"ma_crossover": 0.9}, {"ma_crossover": True})
+    screener_cache.upsert_signal(db, "BBB", "2026-01-03",
+                                 {"ma_crossover": 0.2}, {"ma_crossover": False})
+    out = screener_service.run_scan(strategies=["ma_crossover", "breakout"])
+    assert out["selected"] == ["ma_crossover"]  # breakout dropped, no KeyError/500
+    json.dumps(out)
+
+
+def test_cache_uses_wal_journal(db):
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    conn.close()
+    assert mode.lower() == "wal"  # read-during-refresh must not block
+
+
+def test_run_individual_nan_score_serializes_as_null():
+    # A passing symbol whose cached score is NaN must become null, not a bare
+    # NaN token that strict JSON.parse on the client would reject.
+    scores = pd.DataFrame({"ma_crossover": [np.nan, 0.5]}, index=["AAA", "BBB"])
+    passes = pd.DataFrame({"ma_crossover": [True, True]}, index=["AAA", "BBB"])
+    out = engine.run_individual("ma_crossover", scores, passes)
+    by_sym = {r["symbol"]: r["score"] for r in out}
+    assert by_sym["AAA"] is None
+    assert "NaN" not in json.dumps(out)
+
+
+def test_locked_refresh_logs_and_releases_on_error(monkeypatch):
+    def boom():
+        raise RuntimeError("refresh blew up")
+
+    monkeypatch.setattr(screener_service, "_refresh_core", boom)
+    assert screener_service._refresh_lock.acquire(blocking=False)
+    screener_service._locked_refresh()  # must swallow + release, not raise
+    assert not screener_service._refresh_lock.locked()

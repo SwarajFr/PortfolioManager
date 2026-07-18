@@ -9,7 +9,11 @@ _CANDLE_COLS = ("date", "open", "high", "low", "close", "volume")
 
 
 def _connect(path: str) -> sqlite3.Connection:
-    return sqlite3.connect(path)
+    # WAL lets a screen read concurrently with the background refresh's writes
+    # without "database is locked"; the 5s busy timeout absorbs brief contention.
+    conn = sqlite3.connect(path, timeout=5.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
 
 def init(path: str) -> None:

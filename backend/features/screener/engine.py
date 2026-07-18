@@ -97,10 +97,16 @@ def strategy_metadata(settings: dict) -> list[dict]:
     return [{"name": n, "params": sconf[n]} for n in REGISTRY]
 
 
+def _num(v) -> float | None:
+    """Round to 4dp, but map NaN -> None so payloads never carry a bare NaN
+    token (strict JSON.parse on the client rejects it)."""
+    return None if pd.isna(v) else round(float(v), 4)
+
+
 def run_individual(name: str, scores: pd.DataFrame, passes: pd.DataFrame) -> list[dict]:
     mask = passes[name].astype(bool)
     ranked = scores.loc[mask, name].sort_values(ascending=False)
-    return [{"symbol": sym, "score": round(float(v), 4)} for sym, v in ranked.items()]
+    return [{"symbol": sym, "score": _num(v)} for sym, v in ranked.items()]
 
 
 def run_combined(
@@ -122,7 +128,7 @@ def run_combined(
     results = [
         {
             "symbol": sym,
-            "aggregate": round(float(agg[sym]), 4),
+            "aggregate": _num(agg[sym]),
             "passes": int(passes.loc[sym, selected].astype(bool).sum()),
         }
         for sym in ranked

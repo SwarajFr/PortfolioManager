@@ -2,11 +2,14 @@
 background refresh triggered on login."""
 from __future__ import annotations
 
+import logging
 import threading
 
 import pandas as pd
 
 from . import cache, data, engine, settings
+
+logger = logging.getLogger(__name__)
 
 _refresh_lock = threading.Lock()
 
@@ -39,15 +42,23 @@ def get_individual(strategy: str) -> dict:
 def run_scan(strategies=None, weights=None, k=None, fallback_n=None) -> dict:
     conf = settings.get_settings()["screener"]
     selected = strategies or list(engine.REGISTRY)
+    # Unknown/misspelled strategy names are a client error (surfaced as 400 by
+    # the route), not a 500.
+    unknown = [s for s in selected if s not in engine.REGISTRY]
+    if unknown:
+        raise ValueError(f"Unknown strategies: {unknown}")
     weights = weights or conf["weights"]
     k = conf["default_k"] if k is None else k
     fallback_n = conf["fallback_n"] if fallback_n is None else int(fallback_n)
 
     scores, passes = _read_signal_frames(_cache_path())
-    if scores.empty:
-        return {"results": [], "is_fallback": False, "selected": selected,
+    # Keep only strategies actually present in the cache; a registered strategy
+    # not yet seeded is dropped rather than causing a KeyError in run_combined.
+    available = [] if scores.empty else [s for s in selected if s in scores.columns]
+    if not available:
+        return {"results": [], "is_fallback": False, "selected": [],
                 "k": k, "last_updated": data.last_updated()}
-    out = engine.run_combined(selected, weights, k, fallback_n, scores, passes)
+    out = engine.run_combined(available, weights, k, fallback_n, scores, passes)
     out["last_updated"] = data.last_updated()
     return out
 
@@ -74,6 +85,10 @@ def _refresh_core() -> None:
 def _locked_refresh() -> None:
     try:
         _refresh_core()
+    except Exception:
+        # Runs in a background thread — a raw traceback would just print to
+        # stderr while /refresh already returned 200. Log it instead.
+        logger.exception("screener background refresh failed")
     finally:
         _refresh_lock.release()
 
