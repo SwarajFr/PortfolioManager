@@ -23,9 +23,16 @@ Valid `screen_strategy` names: `ma_crossover`, `momentum_12_1`, `breakout`,
 
 ## Connect Claude Desktop
 
-The backend must be running (`uv run uvicorn main:app --reload` from `backend/`)
-and you must have completed a Kite login (via the web app, or the
+The backend must be running (`uv run python -m uvicorn main:app --reload` from
+`backend/`) and you must have completed a Kite login (via the web app, or the
 `kite_session_status` → `kite_complete_login` tool flow).
+
+> On Windows with Smart App Control / WDAC enabled, launch uvicorn as a module
+> (`python -m uvicorn …`) rather than the `uvicorn` shim — the unsigned
+> `.venv\Scripts\uvicorn.exe` launcher is blocked (os error 4551), but going
+> through the signed `python.exe` is not. The same applies to other console
+> tools: prefer `uv run python -m pytest` over `uv run pytest` if the shim is
+> blocked.
 
 Edit Claude Desktop's config file:
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
