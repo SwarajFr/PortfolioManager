@@ -4,13 +4,14 @@ Guidance for Claude Code when working in this repository.
 
 ## What This Project Is
 
-A full-stack portfolio analytics dashboard for Zerodha Kite Connect brokerage data. Five feature areas:
+A full-stack portfolio analytics dashboard for Zerodha Kite Connect brokerage data. Six feature areas:
 
 - **Portfolio Overview** — allocation table, concentration metrics, sector exposure
 - **Exit Signals** — rule-based scoring (0–100) across 5 KPIs, maps to HOLD/WATCH/TRIM/EXIT per holding
 - **Fragility & Diversification** — MRC-based ENB, effective weight (hidden concentration), urgency scores, correlation regime detection, stress-test VaR, what-if trim simulator
 - **Screener** — NSE500 multi-strategy technical screener (5 strategies) over a three-layer OHLC cache; single-strategy raw ranking + weighted K-of-N combined screen with fallback
 - **MCP Server** — read-only Model Context Protocol server (`features/mcp/`) mounted into the FastAPI app at `/mcp`, exposing holdings, the diversification suite, the screener, live quotes, and Kite session tools to an AI assistant
+- **Agent** — in-app chat tab (`features/agent/`) where a local LLM (Ollama / Gemma 4, provider-agnostic via the OpenAI-compatible API) answers portfolio questions by calling the read-only MCP tools; no order flow
 
 ## Dev Commands
 
@@ -38,6 +39,10 @@ KITE_API_KEY=...
 KITE_API_SECRET=...
 REDIRECT_URL=...
 FRONTEND_URL=...
+
+# Optional — local LLM for the Agent tab (defaults shown; any OpenAI-compatible endpoint)
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
 ```
 
 ### Frontend (React / Vite)
@@ -54,7 +59,7 @@ npm run lint
 
 ### Backend
 
-`main.py` mounts five routers at `/api/{auth,portfolio,exit,fragility,screener}`. CORS locked to `http://localhost:5173`.
+`main.py` mounts six routers at `/api/{auth,portfolio,exit,fragility,screener,agent}` (plus the MCP app at `/mcp`). CORS locked to `http://localhost:5173`.
 
 Each feature is layered identically:
 - `data.py` — fetches from Kite via `core/kite.py`
@@ -87,9 +92,11 @@ ENB history is persisted in SQLite (`fragility_enb_history` table) and returned 
 
 **MCP server** (`features/mcp/`) — a read-only FastMCP v3 server mounted into the same FastAPI process via `mcp.http_app()` (`main.py` attaches `mcp_app.lifespan` and mounts at `/mcp`). One tool module per feature area (`portfolio_tools`, `fragility_tools`, `screener_tools`, `market_tools`, `auth_tools`); each exposes `register(mcp)` that attaches plain functions via `mcp.tool(fn)`. Tools import the service layer directly — no HTTP self-calls. Kite-touching tools use the `@needs_kite` guard (`guards.py`), which returns a `login_url` payload on a missing/expired token instead of raising. Screener tools are cache-only and ungated. Six tools: `portfolio_holdings`, `portfolio_metrics`, `screen_strategy`, `quote`, `kite_session_status`, `kite_complete_login`. See `features/mcp/README.md` for the Claude Desktop client config.
 
+**Agent** (`features/agent/`) — a read-only in-app chat agent. `service.run_chat(history)` runs a manual OpenAI-format tool loop (`openai` SDK) against a provider-agnostic endpoint (`config.LLM_BASE_URL`/`LLM_API_KEY`, default local Ollama at `:11434/v1`; `model` from `agent_settings`, default `gemma4:e4b`). `tools.py` exposes the four read-only MCP tool functions as OpenAI function tools and dispatches calls to them (a tool failure returns `{"error": …}`, never crashes the loop). `routes.py` mounts `POST /api/agent/chat`. Requires a local model — see `features/agent/README.md`.
+
 ### Frontend
 
-`App.jsx` checks auth on mount; renders `LoginPage` or the shell. `activeView` string drives lazy-loaded page switching (`overview` / `exit` / `fragility` / `screener`). The Screener view has two internal tabs (Strategies / Screener) and a "last updated" indicator from `/api/screener/status`.
+`App.jsx` checks auth on mount; renders `LoginPage` or the shell. `activeView` string drives lazy-loaded page switching (`overview` / `exit` / `fragility` / `screener` / `agent`). The Screener view has two internal tabs (Strategies / Screener) and a "last updated" indicator from `/api/screener/status`.
 
 Services in `src/services/` call `apiClient.js` (axios instance → `http://localhost:8000`). `apiClient` is a **named export** `{ apiClient }`, not a default export.
 
