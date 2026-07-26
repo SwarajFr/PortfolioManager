@@ -222,3 +222,71 @@ def test_quote_empty_input(monkeypatch):
     monkeypatch.setattr(guards, "is_authenticated", lambda: True)
     out = market_tools.quote([])
     assert out == {"quotes": [], "not_found": []}
+
+
+# ── T8: auth tools ───────────────────────────────────────────────────────────
+import features.mcp.auth_tools as auth_tools  # noqa: E402
+
+
+class _ProfileKite:
+    def __init__(self, profile=None, raise_token=False):
+        self._profile = profile or {}
+        self._raise = raise_token
+
+    def profile(self):
+        if self._raise:
+            raise TokenException("expired")
+        return self._profile
+
+    def login_url(self):
+        return "http://login-url"
+
+
+def test_session_status_unauthenticated(monkeypatch):
+    monkeypatch.setattr(auth_tools, "is_authenticated", lambda: False)
+    monkeypatch.setattr(auth_tools.kite, "login_url", lambda: "http://login-url")
+
+    out = auth_tools.kite_session_status()
+    assert out["authenticated"] is False
+    assert out["token_valid"] is False
+    assert out["login_url"] == "http://login-url"
+
+
+def test_session_status_valid_probe(monkeypatch):
+    monkeypatch.setattr(auth_tools, "is_authenticated", lambda: True)
+    kobj = _ProfileKite(profile={"user_id": "AB1234"})
+    monkeypatch.setattr(auth_tools, "get_kite", lambda: kobj)
+    monkeypatch.setattr(auth_tools.kite, "login_url", lambda: "http://login-url")
+
+    out = auth_tools.kite_session_status()
+    assert out["authenticated"] is True
+    assert out["token_valid"] is True
+    assert out["user_id"] == "AB1234"
+
+
+def test_session_status_expired_probe(monkeypatch):
+    monkeypatch.setattr(auth_tools, "is_authenticated", lambda: True)
+    monkeypatch.setattr(auth_tools, "get_kite", lambda: _ProfileKite(raise_token=True))
+    monkeypatch.setattr(auth_tools.kite, "login_url", lambda: "http://login-url")
+
+    out = auth_tools.kite_session_status()
+    assert out["authenticated"] is True
+    assert out["token_valid"] is False
+
+
+def test_complete_login_success(monkeypatch):
+    monkeypatch.setattr(auth_tools, "complete_login", lambda rt: {"user_id": "AB1234", "access_token": "tok"})
+    out = auth_tools.kite_complete_login("req-token")
+    assert out["status"] == "authenticated"
+    assert out["user_id"] == "AB1234"
+
+
+def test_complete_login_error(monkeypatch):
+    def boom(rt):
+        raise TokenException("bad request token")
+
+    monkeypatch.setattr(auth_tools, "complete_login", boom)
+    monkeypatch.setattr(auth_tools.kite, "login_url", lambda: "http://login-url")
+    out = auth_tools.kite_complete_login("bad")
+    assert out["status"] == "error"
+    assert "login_url" in out
