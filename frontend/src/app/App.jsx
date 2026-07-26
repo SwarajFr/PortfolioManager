@@ -9,12 +9,14 @@ const PortfolioOverviewPage = lazy(() => import("../features/portfolio/Portfolio
 const ExitSignalsPage = lazy(() => import("../features/exit-signals/ExitSignalsPage"));
 const FragilityPage = lazy(() => import("../features/fragility/FragilityPage"));
 const ScreenerPage = lazy(() => import("../features/screener/ScreenerPage"));
+const AgentPage = lazy(() => import("../features/agent/AgentPage"));
 
 const PAGES = {
   overview: PortfolioOverviewPage,
   exit: ExitSignalsPage,
   fragility: FragilityPage,
   screener: ScreenerPage,
+  agent: AgentPage,
 };
 
 export default function App() {
