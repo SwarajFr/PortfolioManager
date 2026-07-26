@@ -177,3 +177,48 @@ def test_screen_strategy_empty_cache(monkeypatch):
     out = screener_tools.screen_strategy("breakout")
     assert out["total_matches"] == 0
     assert "note" in out
+
+
+# ── T7: quote ────────────────────────────────────────────────────────────────
+import features.mcp.market_tools as market_tools  # noqa: E402
+
+
+class _FakeKite:
+    def __init__(self, data):
+        self._data = data
+        self.called_with = None
+
+    def ltp(self, instruments):
+        self.called_with = instruments
+        return self._data
+
+
+def test_quote_maps_symbols_and_rounds(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    fake = _FakeKite({
+        "NSE:INFY": {"last_price": 1543.256},
+        "NSE:TCS": {"last_price": 3890.0},
+    })
+    monkeypatch.setattr(market_tools, "get_kite", lambda: fake)
+
+    out = market_tools.quote(["infy", "TCS"])
+
+    assert fake.called_with == ["NSE:INFY", "NSE:TCS"]
+    assert {"symbol": "INFY", "ltp": 1543.26} in out["quotes"]
+    assert out["not_found"] == []
+
+
+def test_quote_collects_not_found(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    fake = _FakeKite({"NSE:INFY": {"last_price": 1500.0}})
+    monkeypatch.setattr(market_tools, "get_kite", lambda: fake)
+
+    out = market_tools.quote(["INFY", "BOGUS"])
+    assert [q["symbol"] for q in out["quotes"]] == ["INFY"]
+    assert out["not_found"] == ["BOGUS"]
+
+
+def test_quote_empty_input(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    out = market_tools.quote([])
+    assert out == {"quotes": [], "not_found": []}
