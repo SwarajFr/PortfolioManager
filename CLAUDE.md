@@ -4,12 +4,13 @@ Guidance for Claude Code when working in this repository.
 
 ## What This Project Is
 
-A full-stack portfolio analytics dashboard for Zerodha Kite Connect brokerage data. Four feature areas:
+A full-stack portfolio analytics dashboard for Zerodha Kite Connect brokerage data. Five feature areas:
 
 - **Portfolio Overview** — allocation table, concentration metrics, sector exposure
 - **Exit Signals** — rule-based scoring (0–100) across 5 KPIs, maps to HOLD/WATCH/TRIM/EXIT per holding
 - **Fragility & Diversification** — MRC-based ENB, effective weight (hidden concentration), urgency scores, correlation regime detection, stress-test VaR, what-if trim simulator
 - **Screener** — NSE500 multi-strategy technical screener (5 strategies) over a three-layer OHLC cache; single-strategy raw ranking + weighted K-of-N combined screen with fallback
+- **MCP Server** — read-only Model Context Protocol server (`features/mcp/`) mounted into the FastAPI app at `/mcp`, exposing holdings, the diversification suite, the screener, live quotes, and Kite session tools to an AI assistant
 
 ## Dev Commands
 
@@ -82,7 +83,9 @@ ENB history is persisted in SQLite (`fragility_enb_history` table) and returned 
 - `cache.py` — SQLite store (`screener_cache.db`): `candles` (append-only, PK `(symbol,date)`), `signals` (one latest row per symbol), `meta` (`last_updated`, `seed_complete`).
 - `data.py` — `build_universe()` (Kite instruments → `NSE-EQ` → NSE500 members from a static CSV, behind one pluggable `_passes_liquidity_filter`); three-layer cache: `seed_history()` once, `refresh_ohlc()` incremental (fetch only candles after each symbol's stored max date, **skip-and-log** missing symbols), recompute+store signals only for symbols that got a new candle.
 
-**Login-triggered refresh** — `auth/routes.py` `callback()` calls `screener_on_login()` after `set_access_token()`. It runs a Lock-guarded background thread (seed on first login, else incremental), non-blocking so the UI stays usable on cached data. `POST /api/screener/refresh` is the manual trigger. **Screens read ONLY the cache — scan/individual endpoints never call Kite.**
+**Login-triggered refresh** — `auth/routes.py` `callback()` calls `screener_on_login()` after `set_access_token()`. It runs a Lock-guarded background thread (seed on first login, else incremental), non-blocking so the UI stays usable on cached data. `POST /api/screener/refresh` is the manual trigger. **Screens read ONLY the cache — scan/individual endpoints never call Kite.** The callback's session logic lives in `auth/service.py` `complete_login()`, shared with the MCP `kite_complete_login` tool.
+
+**MCP server** (`features/mcp/`) — a read-only FastMCP v3 server mounted into the same FastAPI process via `mcp.http_app()` (`main.py` attaches `mcp_app.lifespan` and mounts at `/mcp`). One tool module per feature area (`portfolio_tools`, `fragility_tools`, `screener_tools`, `market_tools`, `auth_tools`); each exposes `register(mcp)` that attaches plain functions via `mcp.tool(fn)`. Tools import the service layer directly — no HTTP self-calls. Kite-touching tools use the `@needs_kite` guard (`guards.py`), which returns a `login_url` payload on a missing/expired token instead of raising. Screener tools are cache-only and ungated. Six tools: `portfolio_holdings`, `portfolio_metrics`, `screen_strategy`, `quote`, `kite_session_status`, `kite_complete_login`. See `features/mcp/README.md` for the Claude Desktop client config.
 
 ### Frontend
 
@@ -96,7 +99,7 @@ Services in `src/services/` call `apiClient.js` (axios instance → `http://loca
 
 ## Key Constraints
 
-- Kite access token is in-memory only — server restart requires re-auth via `/api/auth/login`.
+- Kite access token is persisted (table `kite_session` in `settings.db`) and restored on startup only if generated the same IST day; tokens still expire ~06:00 IST daily, requiring re-auth via `/api/auth/login` or the `kite_complete_login` MCP tool.
 - Fragility engine silently drops tickers with insufficient price history; `tickers_excluded[]` in the response lists what was dropped.
 - `settings.db` is created relative to the directory where uvicorn is launched (`backend/`). The screener's `screener_cache.db` is separate and created the same way.
 - The NSE500 universe file (`backend/data/nse500.csv`, path is a setting) is a **static, manual, ~quarterly** drop-in (NSE official constituents CSV with a `Symbol` column) — never fetched or scheduled. The screener refresh skip-and-logs any symbol it can't fetch (delisted/removed) rather than crashing.
