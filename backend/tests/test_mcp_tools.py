@@ -81,3 +81,57 @@ def test_portfolio_holdings_empty(monkeypatch):
     out = portfolio_tools.portfolio_holdings()
     assert out["holdings"] == []
     assert out["totals"]["num_holdings"] == 0
+
+
+# ── T5: portfolio_metrics ────────────────────────────────────────────────────
+import features.mcp.fragility_tools as fragility_tools  # noqa: E402
+
+
+_FULL_ANALYSIS = {
+    "scalars": {
+        "num_positions": 8,
+        "diversification_ratio": 1.42,
+        "enb": 3.1,
+        "effective_positions": 5.4,
+        "normalized_entropy": 0.81,
+        "weight_entropy": 1.68,
+        "concentration_gap": 1.74,
+        "portfolio_vol": 0.184,
+        "portfolio_vol_daily": 0.0116,
+        "portfolio_variance": 0.000134,
+        "avg_correlation": 0.36,
+        "max_correlation": 0.72,
+    },
+    "max_correlation_pair": ["INFY", "TCS"],
+    "principal_risk_contributions": [0.4, 0.2],
+    "principal_bets": [[{"symbol": "INFY", "loading": 0.7, "weight": 0.49}]],
+    "correlation": {"symbols": ["INFY", "TCS"], "matrix": [[1.0, 0.72], [0.72, 1.0]]},
+    "tickers_excluded": ["NEWSTOCK"],
+}
+
+
+def test_portfolio_metrics_is_compact(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    monkeypatch.setattr(fragility_tools, "get_diversity_analysis", lambda: _FULL_ANALYSIS)
+
+    out = fragility_tools.portfolio_metrics()
+
+    assert out["num_positions"] == 8
+    assert out["diversification_ratio"] == 1.42
+    assert out["enb"] == 3.1
+    assert out["max_correlation_pair"] == ["INFY", "TCS"]
+    assert out["top_principal_bet"] == [{"symbol": "INFY", "loading": 0.7, "weight": 0.49}]
+    assert out["tickers_excluded"] == ["NEWSTOCK"]
+    # The raw matrix must NOT be in the payload
+    assert "correlation" not in out
+    assert "matrix" not in out
+
+
+def test_portfolio_metrics_empty(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    empty = {"scalars": {"num_positions": 0}, "tickers_excluded": []}
+    monkeypatch.setattr(fragility_tools, "get_diversity_analysis", lambda: empty)
+
+    out = fragility_tools.portfolio_metrics()
+    assert out["num_positions"] == 0
+    assert "note" in out
