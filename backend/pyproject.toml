@@ -5,6 +5,7 @@ description = "FastAPI backend for the portfolio analytics dashboard (Zerodha Ki
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.136.3",
+    "fastmcp>=3.4.4",
     "kiteconnect>=5.2.0",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
