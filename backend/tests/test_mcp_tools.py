@@ -135,3 +135,45 @@ def test_portfolio_metrics_empty(monkeypatch):
     out = fragility_tools.portfolio_metrics()
     assert out["num_positions"] == 0
     assert "note" in out
+
+
+# ── T6: screen_strategy ──────────────────────────────────────────────────────
+import features.mcp.screener_tools as screener_tools  # noqa: E402
+
+
+def test_screen_strategy_top_n_and_total(monkeypatch):
+    results = [{"symbol": f"S{i}", "score": float(50 - i)} for i in range(30)]
+    monkeypatch.setattr(
+        screener_tools, "get_individual",
+        lambda name: {"strategy": name, "results": results, "last_updated": "2026-07-25T18:00:00"},
+    )
+
+    out = screener_tools.screen_strategy("momentum_12_1", limit=5)
+    assert out["total_matches"] == 30
+    assert len(out["top"]) == 5
+    assert out["top"][0]["symbol"] == "S0"
+    assert out["strategy"] == "momentum_12_1"
+    assert out["universe"] == "NSE500"
+    assert out["last_updated"] == "2026-07-25T18:00:00"
+
+
+def test_screen_strategy_unknown_name():
+    out = screener_tools.screen_strategy("not_a_strategy")
+    assert "error" in out
+    assert "ma_crossover" in out["valid_strategies"]
+
+
+def test_screen_strategy_unsupported_universe():
+    out = screener_tools.screen_strategy("breakout", universe="SP500")
+    assert "error" in out
+    assert out["supported_universes"] == ["NSE500"]
+
+
+def test_screen_strategy_empty_cache(monkeypatch):
+    monkeypatch.setattr(
+        screener_tools, "get_individual",
+        lambda name: {"strategy": name, "results": [], "last_updated": None},
+    )
+    out = screener_tools.screen_strategy("breakout")
+    assert out["total_matches"] == 0
+    assert "note" in out
