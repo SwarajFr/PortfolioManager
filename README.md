@@ -16,6 +16,8 @@ It uses the finance formulas and methods we actually built into the project:
 
 This project helps turn raw brokerage data into a structured decision-making workflow for portfolio review, concentration control, diversification analysis, and exit planning.
 
+You can also query it in plain English — through an in-app **Agent** tab powered by a local, free LLM (Ollama / Gemma 4), or from an external assistant like Claude Desktop via a read-only **MCP server**. Both are read-only; neither can place orders.
+
 ## Screener Strategies
 
 The Screener runs five technical strategies over the NSE500 universe. Each strategy produces two
@@ -65,6 +67,7 @@ changing strategies, weights, or K re-screens instantly against cached data.
 
 - Backend: FastAPI, Python (python 3.12 recommended ), Pandas, NumPy, SciPy, scikit-learn
 - Frontend: React, Vite, Axios
+- AI layer: FastMCP (read-only MCP server) · OpenAI SDK → local Ollama / Gemma 4 for the in-app Agent (provider-agnostic — any OpenAI-compatible endpoint)
 - Broker integration: Zerodha Kite Connect API
 
 ## How to Run
@@ -98,12 +101,20 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
    KITE_API_KEY=your_api_key
    KITE_API_SECRET=your_api_secret
    REDIRECT_URL=your_redirect_url
+   FRONTEND_URL=http://localhost:5173
+
+   # Optional — local LLM for the Agent tab (defaults shown; any OpenAI-compatible endpoint)
+   LLM_BASE_URL=http://localhost:11434/v1
+   LLM_API_KEY=ollama
    ```
 
-4. Start the backend server:
+4. Start the backend server (`http://localhost:8000`):
    ```bash
    uv run uvicorn main:app --reload
    ```
+   > On Windows with **Smart App Control / WDAC** enabled, the unsigned `uvicorn.exe` shim is
+   > blocked (os error 4551). Launch it as a module instead — same result:
+   > `uv run python -m uvicorn main:app --reload`
 
 `uv run` re-syncs the environment before each command, so there is no virtual environment
 to activate. To add or remove a dependency, use `uv add <package>` / `uv remove <package>` —
@@ -125,3 +136,54 @@ both update `pyproject.toml` and `uv.lock`, which are committed to the repo.
    ```bash
    npm run dev
    ```
+
+### Using the app
+
+Open `http://localhost:5173`, click **Login** (redirects through Zerodha and back), and the
+dashboard loads with five views — **Overview · Exit Signals · Fragility · Screener · Agent**. The
+screener seeds its price cache in the background on first login, so its results fill in shortly
+after.
+
+## Ask about your portfolio in plain English
+
+Two independent, **read-only** AI interfaces sit on top of the same analytics — use either or both.
+Neither can place, modify, or cancel orders.
+
+### Agent tab (in-app, local & free)
+
+A chat tab that answers portfolio questions by calling the analytics as tools. It runs a **local**
+model via [Ollama](https://ollama.com) — no API key, no per-message cost, and your data never leaves
+your machine.
+
+1. Install Ollama, then pull the default model:
+   ```bash
+   ollama pull gemma4:e4b     # 9.6 GB; laptop/CPU-friendly
+   ```
+2. Make sure Ollama is running — `ollama list` should show the model. The Agent tab talks to it at
+   `http://localhost:11434/v1` by default.
+3. Open the **Agent** tab and ask, e.g. *"What are my holdings?"*, *"How diversified am I?"*, or
+   *"Run the momentum screen."*
+
+To use a larger local model or a cloud endpoint instead, set `LLM_BASE_URL` / `LLM_API_KEY` in
+`backend/.env` and the model in settings — no code change. More detail:
+[`backend/features/agent/README.md`](backend/features/agent/README.md).
+
+### MCP server (external assistants like Claude Desktop)
+
+The backend also exposes the same read-only tools as a **Model Context Protocol** server at
+`http://localhost:8000/mcp/`, so an external assistant such as Claude Desktop can drive them —
+powered by your existing assistant, no extra API key. Add this to Claude Desktop's
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "kite-portfolio": {
+      "command": "uvx",
+      "args": ["fastmcp-remote", "http://localhost:8000/mcp/"]
+    }
+  }
+}
+```
+
+More detail: [`backend/features/mcp/README.md`](backend/features/mcp/README.md).
