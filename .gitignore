@@ -29,6 +29,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# AI agent working files (local only — specs, plans, tool state, instructions)
+.claude/
+.superpowers/
+CLAUDE.md
+
 # Editor / IDE
 .vscode/*
 !.vscode/extensions.json
