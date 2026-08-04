@@ -1,11 +1,15 @@
-"""Fragility settings — currently just the correlation estimation window.
+"""Fragility settings — currently just the minimum-history threshold.
 
-`long_window` is doing more work than its size suggests. It is simultaneously
-the covariance lookback, the baseline the short window is compared against for
-regime detection, and the minimum history a ticker needs to be included at all
-(`service.py` drops anything shorter). Raising it therefore steadies the
-estimate *and* silently excludes more recent listings — the trade-off is real,
-which is why it is exposed rather than fixed.
+Despite the name, `long_window` is not a lookback: the analysis always requests
+`MAX_LOOKBACK_DAYS` (900) of prices and estimates the covariance off whatever
+survives. What it actually sets is a *floor*, used twice in `service.py` — a
+ticker needs at least this many observations to be included at all, and the
+whole analysis is skipped if fewer rows than this remain after aligning.
+
+That makes it the dial between stability and coverage. Raising it steadies the
+correlation estimate and silently excludes more recently listed holdings, which
+is why it is exposed rather than fixed. Excluded tickers are named in
+`tickers_excluded` so the omission is visible rather than a quiet distortion.
 
 Saves merge over `_DEFAULTS` so a partial payload cannot delete a key the engine
 depends on.
