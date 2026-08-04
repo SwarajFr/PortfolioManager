@@ -45,21 +45,23 @@ def compute_overview(df, config):
     total_pnl = df["pnl"].sum()
     capital_at_risk = df[df["pnl"] < 0]["value"].sum()
 
-    def classify(symbol):
-        for group, symbols in config["groups"].items():
-            if symbol in symbols:
-                return group
-        return "Unassigned"
+    # Invert the config once — symbol -> group — instead of scanning every
+    # group's member list for every holding. `setdefault` keeps the previous
+    # first-listed-wins rule for a symbol the user put in two groups.
+    group_of: dict[str, str] = {}
+    for group, symbols in config["groups"].items():
+        for symbol in symbols:
+            group_of.setdefault(symbol, group)
 
-    df["group"] = df["tradingsymbol"].apply(classify)
+    df["group"] = df["tradingsymbol"].map(group_of).fillna("Unassigned")
     grouped = df.groupby("group").agg({"value": "sum", "invested": "sum", "pnl": "sum"}).reset_index()
 
     allocation = []
-    for _, row in grouped.iterrows():
-        group = row["group"]
-        value = row["value"]
-        invested = row["invested"]
-        pnl = row["pnl"]
+    for row in grouped.itertuples(index=False):
+        group = row.group
+        value = row.value
+        invested = row.invested
+        pnl = row.pnl
         allocation_pct = (value / total_value) * 100 if total_value else 0
         pnl_pct = (pnl / invested) * 100 if invested else 0
 
