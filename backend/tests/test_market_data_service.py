@@ -399,6 +399,89 @@ def test_candle_store_read_of_unknown_symbol_is_empty(data_config):
     assert list(frame.columns) == ["open", "high", "low", "close", "volume"]
 
 
+# ── batched reads ────────────────────────────────────────────────────────────
+# read_many exists purely to collapse N point queries into one range scan, so
+# every test here is really asking the same thing: is it *indistinguishable*
+# from calling read() in a loop?
+def _seed(repo, symbol, days, base=100.0):
+    from core.data import Candle
+
+    repo.upsert(
+        symbol,
+        [
+            Candle(datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
+                   base + i, base + i + 1, base + i - 1, base + i + 0.5, 1000 + i)
+            for i in range(days)
+        ],
+    )
+
+
+def test_read_many_matches_a_loop_of_read(data_config):
+    from core.data.repositories import CandleRepository
+
+    repo = CandleRepository(data_config.db_path)
+    for symbol in ("INFY", "TCS", "WIPRO"):
+        _seed(repo, symbol, 10)
+
+    batched = repo.read_many(["INFY", "TCS", "WIPRO"])
+    assert set(batched) == {"INFY", "TCS", "WIPRO"}
+    for symbol, frame in batched.items():
+        expected = repo.read(symbol)
+        pd.testing.assert_frame_equal(frame, expected)
+
+
+def test_read_many_applies_the_same_window_as_read(data_config):
+    from core.data.repositories import CandleRepository
+
+    repo = CandleRepository(data_config.db_path)
+    _seed(repo, "INFY", 30)
+    start, end = datetime.date(2026, 1, 10), datetime.date(2026, 1, 20)
+
+    pd.testing.assert_frame_equal(
+        repo.read_many(["INFY"], start, end)["INFY"], repo.read("INFY", start, end)
+    )
+
+
+def test_read_many_omits_symbols_with_no_rows(data_config):
+    from core.data.repositories import CandleRepository
+
+    repo = CandleRepository(data_config.db_path)
+    _seed(repo, "INFY", 5)
+
+    # An absent symbol is left out entirely rather than mapped to an empty
+    # frame, so callers can treat the keys as "what we actually have".
+    assert set(repo.read_many(["INFY", "NOSUCH"])) == {"INFY"}
+    assert repo.read_many([]) == {}
+    assert repo.read_many(["NOSUCH"]) == {}
+
+
+def test_read_many_deduplicates_and_survives_more_symbols_than_sqlite_params(data_config):
+    from core.data.repositories import CandleRepository
+
+    repo = CandleRepository(data_config.db_path)
+    symbols = [f"SYM{i:04d}" for i in range(1200)]  # exceeds the 999-param floor
+    for symbol in symbols:
+        _seed(repo, symbol, 2)
+
+    batched = repo.read_many([*symbols, *symbols])  # duplicates must not double rows
+    assert len(batched) == 1200
+    assert all(len(frame) == 2 for frame in batched.values())
+
+
+def test_date_ranges_matches_a_loop_of_date_range(data_config):
+    from core.data.repositories import CandleRepository
+
+    repo = CandleRepository(data_config.db_path)
+    _seed(repo, "INFY", 10)
+    _seed(repo, "TCS", 3)
+
+    ranges = repo.date_ranges(["INFY", "TCS", "NOSUCH"])
+    assert ranges["INFY"] == repo.date_range("INFY")
+    assert ranges["TCS"] == repo.date_range("TCS")
+    # Unknown symbols report (None, None), exactly as date_range does.
+    assert ranges["NOSUCH"] == (None, None) == repo.date_range("NOSUCH")
+
+
 def test_meta_roundtrip(data_config):
     from core.data.repositories import MetaRepository
 

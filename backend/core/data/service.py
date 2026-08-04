@@ -113,23 +113,44 @@ class MarketDataService:
         A single unresolvable or failing symbol must not sink a portfolio-wide
         analysis, so failures are logged and skipped — the same tolerance the
         per-feature fetchers had before.
+
+        This is not `get_history` in a loop, though it is equivalent to one. The
+        loop form cost two SQLite connections per symbol (a stored-range probe
+        and the read itself), which for a 500-symbol universe dominated the work
+        of actually returning rows. Both are hoisted out: one grouped query
+        learns every stored range up front, and one range scan returns every
+        frame. Only the provider fetches, which are genuinely per-symbol, stay
+        in the loop.
         """
         start, end = self._window(start, end, lookback_days)
-        out: dict[str, pd.DataFrame] = {}
+
+        # Resolve once, first occurrence wins. Keeping refs here means a caller
+        # that passed InstrumentRefs still skips the instrument-master lookup.
+        resolved: dict[str, InstrumentRef | None] = {}
         for raw in symbols:
-            name, _ = _coerce_ref(raw)
-            if not name or name in out:
-                continue
-            try:
-                frame = self.get_history(
-                    raw, start=start, end=end, interval=interval, refresh=refresh
-                )
-            except DataServiceError as exc:
-                logger.warning("history unavailable for %s: %s", name, exc)
-                continue
-            if not frame.empty:
-                out[name] = frame
-        return out
+            name, ref = _coerce_ref(raw)
+            if name and name not in resolved:
+                resolved[name] = ref
+        if not resolved:
+            return {}
+
+        failed: set[str] = set()
+        if refresh:
+            stored = self._candles.date_ranges(list(resolved))
+            for name, ref in resolved.items():
+                try:
+                    self._fill_window(
+                        name, start, end, interval, ref, known_range=stored[name]
+                    )
+                except DataServiceError as exc:
+                    # Excluded from the read below, not merely left unfilled, so
+                    # a failing symbol is absent exactly as it was before.
+                    logger.warning("history unavailable for %s: %s", name, exc)
+                    failed.add(name)
+
+        return self._candles.read_many(
+            [name for name in resolved if name not in failed], start, end
+        )
 
     def get_close_frame(
         self,
@@ -328,13 +349,22 @@ class MarketDataService:
         end: datetime.date,
         interval: str,
         ref: InstrumentRef | None = None,
+        known_range: tuple[str | None, str | None] | None = None,
     ) -> int:
-        """Fetch only the parts of [start, end] the store is missing."""
+        """Fetch only the parts of [start, end] the store is missing.
+
+        `known_range` lets a batch caller supply the stored (first, last) it has
+        already looked up, so a 500-symbol refresh runs one grouped query rather
+        than 500 probes. Note `(None, None)` is a meaningful value — "nothing
+        stored" — so the check is `is not None`, not truthiness.
+        """
         attempt_key = (symbol, interval, start, end)
         if self._fill_attempts.get(attempt_key) is not None:
             return 0
 
-        first, last = self._candles.date_range(symbol)
+        first, last = (
+            known_range if known_range is not None else self._candles.date_range(symbol)
+        )
         gaps = _missing_ranges(first, last, start, end)
         if not gaps:
             return 0
