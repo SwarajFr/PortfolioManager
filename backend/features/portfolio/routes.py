@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Request
+
+from core.data import get_market_data
+from core.kite import is_authenticated
+
 from .service import get_overview
 from .settings import get_settings, save_settings, reset_settings
-from .data import get_holdings
-from core.kite import is_authenticated
 
 router = APIRouter()
 
@@ -20,7 +22,7 @@ def read_settings():
     holdings_symbols = []
     if is_authenticated():
         try:
-            df = get_holdings()
+            df = get_market_data().get_holdings()
             holdings_symbols = sorted(df["tradingsymbol"].tolist())
         except Exception:
             pass

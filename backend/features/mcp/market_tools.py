@@ -1,7 +1,7 @@
-"""MCP tool: live last-traded price for NSE symbols via the warm Kite session."""
+"""MCP tool: live last-traded price for NSE symbols via the shared data service."""
 from __future__ import annotations
 
-from core.kite import get_kite
+from core.data import get_market_data
 
 from .guards import needs_kite
 
@@ -20,17 +20,16 @@ def quote(symbols: list[str]) -> dict:
         return {"quotes": [], "not_found": []}
 
     cleaned = [str(s).strip().upper() for s in symbols if str(s).strip()][:_MAX_SYMBOLS]
-    keys = [f"NSE:{s}" for s in cleaned]
-    data = get_kite().ltp(keys)
+    found = get_market_data().get_quote(cleaned)
 
-    quotes, not_found = [], []
-    for sym in cleaned:
-        entry = data.get(f"NSE:{sym}")
-        if entry and entry.get("last_price") is not None:
-            quotes.append({"symbol": sym, "ltp": round(float(entry["last_price"]), 2)})
-        else:
-            not_found.append(sym)
-    return {"quotes": quotes, "not_found": not_found}
+    return {
+        "quotes": [
+            {"symbol": s, "ltp": round(found[s].last_price, 2)}
+            for s in cleaned
+            if s in found
+        ],
+        "not_found": [s for s in cleaned if s not in found],
+    }
 
 
 def register(mcp) -> None:

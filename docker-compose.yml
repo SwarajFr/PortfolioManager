@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    environment:
+      # Inside a container "localhost" is the container. The Agent tab's Ollama
+      # runs on the host, so it has to be addressed as host.docker.internal.
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
+      # Docker Desktop on Windows does not propagate inotify events across a
+      # bind mount from a Windows drive. Without polling, --reload never fires.
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      # Source for hot reload, and it keeps settings.db / screener_cache.db on
+      # the host — the cached candles survive rebuilds and a native `uv run`
+      # reads the same files.
+      - ./backend:/app
+    extra_hosts:
+      # Implicit on Docker Desktop; required on native Linux.
+      - "host.docker.internal:host-gateway"

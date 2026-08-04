@@ -44,19 +44,33 @@ def test_needs_kite_catches_token_exception(monkeypatch):
     assert "login_url" in out
 
 
-# ── T4: portfolio_holdings ───────────────────────────────────────────────────
-import pandas as pd  # noqa: E402
+def test_needs_kite_catches_data_layer_auth_error(monkeypatch):
+    """The data service translates Kite auth failures into its own error type;
+    the guard must recognise that translation too, not 500."""
+    from core.data import NotAuthenticatedError
 
+    _fake_login_url(monkeypatch)
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+
+    @guards.needs_kite
+    def tool():
+        raise NotAuthenticatedError("session expired mid-call")
+
+    out = tool()
+    assert out["status"] == "auth_required"
+    assert "login_url" in out
+
+
+# ── T4: portfolio_holdings ───────────────────────────────────────────────────
 import features.mcp.portfolio_tools as portfolio_tools  # noqa: E402
 
 
-def test_portfolio_holdings_formats_rows_and_totals(monkeypatch):
+def test_portfolio_holdings_formats_rows_and_totals(monkeypatch, market_data, stub_provider):
     monkeypatch.setattr(guards, "is_authenticated", lambda: True)
-    df = pd.DataFrame([
+    stub_provider.holdings = [
         {"tradingsymbol": "INFY", "quantity": 10, "average_price": 100.0, "last_price": 150.0},
         {"tradingsymbol": "TCS", "quantity": 5, "average_price": 200.0, "last_price": 180.0},
-    ])
-    monkeypatch.setattr(portfolio_tools, "get_holdings", lambda: df)
+    ]
 
     out = portfolio_tools.portfolio_holdings()
 
@@ -74,9 +88,9 @@ def test_portfolio_holdings_formats_rows_and_totals(monkeypatch):
     assert "instrument_token" not in infy
 
 
-def test_portfolio_holdings_empty(monkeypatch):
+def test_portfolio_holdings_empty(monkeypatch, market_data, stub_provider):
     monkeypatch.setattr(guards, "is_authenticated", lambda: True)
-    monkeypatch.setattr(portfolio_tools, "get_holdings", lambda: pd.DataFrame())
+    stub_provider.holdings = []
 
     out = portfolio_tools.portfolio_holdings()
     assert out["holdings"] == []
@@ -137,85 +151,87 @@ def test_portfolio_metrics_empty(monkeypatch):
     assert "note" in out
 
 
-# ── T6: screen_strategy ──────────────────────────────────────────────────────
-import features.mcp.screener_tools as screener_tools  # noqa: E402
+# ── T6: advisor tools ────────────────────────────────────────────────────────
+import features.mcp.advisor_tools as advisor_tools  # noqa: E402
 
 
-def test_screen_strategy_top_n_and_total(monkeypatch):
-    results = [{"symbol": f"S{i}", "score": float(50 - i)} for i in range(30)]
+def test_advisor_tools_pass_caller_params_through(monkeypatch):
+    """The whole point of the rebuild: a horizon and target named in the user's
+    question must reach the service untouched, not be replaced by a default."""
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    seen = {}
     monkeypatch.setattr(
-        screener_tools, "get_individual",
-        lambda name: {"strategy": name, "results": results, "last_updated": "2026-07-25T18:00:00"},
+        advisor_tools, "_buy_ideas",
+        lambda h, t, limit, exclude: seen.update(horizon=h, target=t, limit=limit) or {"ideas": []},
     )
 
-    out = screener_tools.screen_strategy("momentum_12_1", limit=5)
-    assert out["total_matches"] == 30
-    assert len(out["top"]) == 5
-    assert out["top"][0]["symbol"] == "S0"
-    assert out["strategy"] == "momentum_12_1"
-    assert out["universe"] == "NSE500"
-    assert out["last_updated"] == "2026-07-25T18:00:00"
+    advisor_tools.buy_ideas(horizon_months=2, target_gain_pct=5, limit=3)
+    assert seen == {"horizon": 2, "target": 5, "limit": 3}
 
 
-def test_screen_strategy_unknown_name():
-    out = screener_tools.screen_strategy("not_a_strategy")
-    assert "error" in out
-    assert "ma_crossover" in out["valid_strategies"]
-
-
-def test_screen_strategy_unsupported_universe():
-    out = screener_tools.screen_strategy("breakout", universe="SP500")
-    assert "error" in out
-    assert out["supported_universes"] == ["NSE500"]
-
-
-def test_screen_strategy_empty_cache(monkeypatch):
+def test_advisor_tools_omit_params_when_unspecified(monkeypatch):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    seen = {}
     monkeypatch.setattr(
-        screener_tools, "get_individual",
-        lambda name: {"strategy": name, "results": [], "last_updated": None},
+        advisor_tools, "_portfolio_actions",
+        lambda h, t, limit: seen.update(horizon=h, target=t) or {"sell": [], "topup": []},
     )
-    out = screener_tools.screen_strategy("breakout")
-    assert out["total_matches"] == 0
-    assert "note" in out
+
+    advisor_tools.portfolio_actions()
+    # None, not a hardcoded number — the service resolves it from the profile.
+    assert seen == {"horizon": None, "target": None}
+
+
+def test_advisor_tools_require_auth(monkeypatch):
+    _fake_login_url(monkeypatch)
+    monkeypatch.setattr(guards, "is_authenticated", lambda: False)
+
+    for call in (
+        advisor_tools.portfolio_actions,
+        advisor_tools.buy_ideas,
+        advisor_tools.advice_history,
+        advisor_tools.investor_profile,
+    ):
+        assert call()["status"] == "auth_required"
+
+
+def test_advisor_tools_all_registered():
+    registered = []
+    advisor_tools.register(type("Mcp", (), {"tool": lambda self, fn: registered.append(fn.__name__)})())
+    assert registered == ["portfolio_actions", "buy_ideas", "advice_history", "investor_profile"]
 
 
 # ── T7: quote ────────────────────────────────────────────────────────────────
 import features.mcp.market_tools as market_tools  # noqa: E402
 
 
-class _FakeKite:
-    def __init__(self, data):
-        self._data = data
-        self.called_with = None
-
-    def ltp(self, instruments):
-        self.called_with = instruments
-        return self._data
-
-
-def test_quote_maps_symbols_and_rounds(monkeypatch):
+def test_quote_maps_symbols_and_rounds(monkeypatch, market_data, stub_provider):
     monkeypatch.setattr(guards, "is_authenticated", lambda: True)
-    fake = _FakeKite({
-        "NSE:INFY": {"last_price": 1543.256},
-        "NSE:TCS": {"last_price": 3890.0},
-    })
-    monkeypatch.setattr(market_tools, "get_kite", lambda: fake)
+    stub_provider.quotes = {"INFY": 1543.256, "TCS": 3890.0}
 
     out = market_tools.quote(["infy", "TCS"])
 
-    assert fake.called_with == ["NSE:INFY", "NSE:TCS"]
+    assert stub_provider.quote_calls == [["INFY", "TCS"]]
     assert {"symbol": "INFY", "ltp": 1543.26} in out["quotes"]
     assert out["not_found"] == []
 
 
-def test_quote_collects_not_found(monkeypatch):
+def test_quote_collects_not_found(monkeypatch, market_data, stub_provider):
     monkeypatch.setattr(guards, "is_authenticated", lambda: True)
-    fake = _FakeKite({"NSE:INFY": {"last_price": 1500.0}})
-    monkeypatch.setattr(market_tools, "get_kite", lambda: fake)
+    stub_provider.quotes = {"INFY": 1500.0}
 
     out = market_tools.quote(["INFY", "BOGUS"])
     assert [q["symbol"] for q in out["quotes"]] == ["INFY"]
     assert out["not_found"] == ["BOGUS"]
+
+
+def test_quote_caps_symbol_count(monkeypatch, market_data, stub_provider):
+    monkeypatch.setattr(guards, "is_authenticated", lambda: True)
+    symbols = [f"S{i}" for i in range(60)]
+    stub_provider.quotes = dict.fromkeys(symbols, 1.0)
+
+    out = market_tools.quote(symbols)
+    assert len(out["quotes"]) == 50  # capped, payload stays compact
 
 
 def test_quote_empty_input(monkeypatch):

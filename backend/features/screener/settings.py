@@ -21,16 +21,14 @@ _DEFAULTS = {
         "normalization": "percentile",
     },
     "universe": {
-        "segment": "NSE",  # Kite instruments() segment value for NSE cash equity (instrument_type "EQ")
+        "exchange": "NSE",  # which instrument master the data service pulls
+        "segment": "NSE",   # segment value for NSE cash equity (instrument_type "EQ")
         "constituents_path": "data/nse500.csv",  # relative to backend/
         "membership_column": "Symbol",
     },
-    "data": {
-        "cache_backend": "sqlite",
-        "cache_path": "screener_cache.db",       # relative to backend/
-        "seed_lookback_days": 500,
-        "kite_rate_limit_rps": 3.0,
-    },
+    # Cache location, seed depth and the upstream rate limit are no longer
+    # screener settings: they belong to the shared data layer (core.data.config)
+    # now that every feature reads through it.
 }
 
 

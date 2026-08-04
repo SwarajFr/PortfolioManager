@@ -5,6 +5,7 @@ import functools
 
 from kiteconnect.exceptions import TokenException
 
+from core.data import NotAuthenticatedError
 from core.kite import is_authenticated, kite
 
 
@@ -32,7 +33,9 @@ def needs_kite(fn):
             return auth_required()
         try:
             return fn(*args, **kwargs)
-        except TokenException:
+        except (TokenException, NotAuthenticatedError):
+            # A token that expires mid-call surfaces either as the raw Kite
+            # exception or as the data layer's translation of it.
             return auth_required()
 
     return wrapper

@@ -7,6 +7,8 @@ import threading
 
 import pandas as pd
 
+from core.data import get_market_data
+
 from . import cache, data, engine, settings
 
 logger = logging.getLogger(__name__)
@@ -14,12 +16,8 @@ logger = logging.getLogger(__name__)
 _refresh_lock = threading.Lock()
 
 
-def _cache_path() -> str:
-    return settings.get_settings()["data"]["cache_path"]
-
-
-def _read_signal_frames(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    rows = cache.read_signals(path)
+def _read_signal_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rows = cache.read_signals()
     scores = {r["symbol"]: r["scores"] for r in rows}
     passes = {r["symbol"]: r["passes"] for r in rows}
     scores_df = pd.DataFrame.from_dict(scores, orient="index")
@@ -32,7 +30,7 @@ def get_strategies() -> dict:
 
 
 def get_individual(strategy: str) -> dict:
-    scores, passes = _read_signal_frames(_cache_path())
+    scores, passes = _read_signal_frames()
     if scores.empty or strategy not in scores.columns:
         return {"strategy": strategy, "results": [], "last_updated": data.last_updated()}
     results = engine.run_individual(strategy, scores, passes)
@@ -51,7 +49,7 @@ def run_scan(strategies=None, weights=None, k=None, fallback_n=None) -> dict:
     k = conf["default_k"] if k is None else k
     fallback_n = conf["fallback_n"] if fallback_n is None else int(fallback_n)
 
-    scores, passes = _read_signal_frames(_cache_path())
+    scores, passes = _read_signal_frames()
     # Keep only strategies actually present in the cache; a registered strategy
     # not yet seeded is dropped rather than causing a KeyError in run_combined.
     available = [] if scores.empty else [s for s in selected if s in scores.columns]
@@ -64,19 +62,18 @@ def run_scan(strategies=None, weights=None, k=None, fallback_n=None) -> dict:
 
 
 def get_status() -> dict:
-    path = _cache_path()
+    status = get_market_data().status()
     return {
-        "last_updated": cache.get_meta(path, "last_updated"),
-        "seed_complete": cache.get_meta(path, "seed_complete") == "1",
-        "symbol_count": cache.symbol_count(path),
+        "last_updated": status["last_updated"],
+        "seed_complete": status["seed_complete"],
+        "symbol_count": status["symbol_count"],
         "refreshing": _refresh_lock.locked(),
     }
 
 
 def _refresh_core() -> None:
-    path = _cache_path()
-    cache.init(path)
-    if cache.get_meta(path, "seed_complete") == "1":
+    cache.init()
+    if get_market_data().status()["seed_complete"]:
         data.refresh_ohlc()
     else:
         data.seed_history()

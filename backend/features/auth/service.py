@@ -1,5 +1,7 @@
-from core.kite import kite, set_access_token
 from config import API_SECRET
+from core.data import get_market_data
+from core.identity import get_active_user
+from core.kite import kite, set_access_token
 from features.screener.service import screener_on_login
 
 
@@ -7,9 +9,27 @@ def complete_login(request_token: str) -> dict:
     """Single source of truth for turning a request_token into a live session.
 
     Shared by the REST /callback route and the MCP kite_complete_login tool:
-    generate session -> set (and persist) token -> kick the screener refresh.
+    generate session -> purge any previous account's cached state -> set (and
+    persist) token -> kick the screener refresh.
+
+    The purge lives here rather than in core.kite because core.data.providers.kite
+    imports core.kite, so core.kite importing core.data would be a cycle. This is
+    also the single chokepoint both login paths pass through.
     """
     data = kite.generate_session(request_token, api_secret=API_SECRET)
-    set_access_token(data["access_token"])
+
+    user_id = data.get("user_id")
+    if not user_id:
+        # Without an identity we cannot scope this account's settings, and every
+        # later read would silently fall back to defaults. Fail closed.
+        raise ValueError("Kite session response contained no user_id")
+
+    if user_id != get_active_user():
+        # A different account: nothing cached for the previous one may survive.
+        get_market_data().clear_user_caches()
+
+    set_access_token(data["access_token"], user_id)
     screener_on_login()
-    return {"user_id": data.get("user_id"), "access_token": data["access_token"]}
+    # Deliberately no access_token in the response: no caller reads it, and
+    # handing back a credential nobody needs is a standing footgun.
+    return {"user_id": user_id}

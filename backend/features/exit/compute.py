@@ -182,6 +182,13 @@ def compute_exit_signals(
             "invested": r["invested"],
             "return_pct": r["return_pct"],
             "weight_pct": r["weight_pct"],
+            # The inputs behind the scores, not just the scores. The dashboard
+            # ignores these; the advisor narrates them, so a recommendation can
+            # cite the volatility or moving average that actually triggered it.
+            "volatility": r["volatility"],
+            "ma50": r["ma50"],
+            "ma200": r["ma200"],
+            "rar": r["rar"],
             "scores": {
                 "loss_severity": s1,
                 "risk_vs_median": s2,

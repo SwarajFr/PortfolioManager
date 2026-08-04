@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
-from . import auth_tools, fragility_tools, market_tools, portfolio_tools, screener_tools
+from . import advisor_tools, auth_tools, fragility_tools, market_tools, portfolio_tools
 
-_MODULES = (auth_tools, portfolio_tools, fragility_tools, screener_tools, market_tools)
+#: Advisor first: those four answer whole questions, and listing them ahead of
+#: the raw-data tools nudges a model towards one call instead of five.
+_MODULES = (advisor_tools, auth_tools, portfolio_tools, fragility_tools, market_tools)
 
 
 def build_server() -> FastMCP:

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
+from core.identity import get_active_user
 from core.kite import kite, is_authenticated
 from config import FRONTEND_URL
 from .service import complete_login
@@ -10,7 +11,9 @@ router = APIRouter()
 
 @router.get("/status")
 def status():
-    return {"authenticated": is_authenticated()}
+    # user_id lets the UI name the live account, which is the visible proof that
+    # account scoping is in effect.
+    return {"authenticated": is_authenticated(), "user_id": get_active_user()}
 
 
 @router.get("/login")

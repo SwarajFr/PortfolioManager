@@ -1,4 +1,9 @@
-"""Tests for the NSE multi-strategy screener."""
+"""Tests for the NSE multi-strategy screener.
+
+Candles, instruments and refresh metadata are the data layer's concern now and
+are covered by test_market_data_service.py; these tests exercise the screener's
+own logic against the `market_data` fixture's stub-backed service.
+"""
 from __future__ import annotations
 
 import json
@@ -11,13 +16,6 @@ from features.screener import settings as screener_settings
 from features.screener import cache as screener_cache
 
 
-@pytest.fixture()
-def db(tmp_path):
-    path = str(tmp_path / "screener_cache.db")
-    screener_cache.init(path)
-    return path
-
-
 def test_defaults_have_all_config_keys():
     d = screener_settings.get_settings()
     assert d["strategies"]["ma_crossover"] == {"fast": 20, "slow": 50}
@@ -28,40 +26,26 @@ def test_defaults_have_all_config_keys():
     assert d["screener"]["default_k"] == "all"
     assert d["screener"]["fallback_n"] == 10
     assert d["screener"]["normalization"] == "percentile"
+    assert d["universe"]["exchange"] == "NSE"
     assert d["universe"]["segment"] == "NSE"
-    assert d["data"]["seed_lookback_days"] == 500
-    assert d["data"]["kite_rate_limit_rps"] == 3.0
+    # Cache path / seed depth / rate limit now belong to the data layer.
+    assert "data" not in d
 
 
-def test_upsert_candles_is_append_only(db):
-    rows = [
-        {"date": "2026-01-01", "open": 1, "high": 2, "low": 1, "close": 1.5, "volume": 10},
-        {"date": "2026-01-02", "open": 1.5, "high": 2.5, "low": 1.4, "close": 2.0, "volume": 12},
-    ]
-    assert screener_cache.upsert_candles(db, "RELIANCE", rows) == 2
-    # Re-inserting the same dates + one new date appends only the new one.
-    more = rows + [{"date": "2026-01-03", "open": 2, "high": 3, "low": 2, "close": 2.5, "volume": 9}]
-    assert screener_cache.upsert_candles(db, "RELIANCE", more) == 1
-    df = screener_cache.read_candles(db, "RELIANCE")
-    assert list(df["date"]) == ["2026-01-01", "2026-01-02", "2026-01-03"]
-    assert screener_cache.last_candle_date(db, "RELIANCE") == "2026-01-03"
-
-
-def test_signals_roundtrip(db):
+def test_signals_roundtrip(market_data):
     screener_cache.upsert_signal(
-        db, "TCS", "2026-01-03", {"ma_crossover": 0.1}, {"ma_crossover": True}
+        "TCS", "2026-01-03", {"ma_crossover": 0.1}, {"ma_crossover": True}
     )
-    rows = screener_cache.read_signals(db)
-    assert rows == [
+    assert screener_cache.read_signals() == [
         {"symbol": "TCS", "as_of_date": "2026-01-03",
          "scores": {"ma_crossover": 0.1}, "passes": {"ma_crossover": True}}
     ]
 
 
-def test_meta_roundtrip(db):
-    assert screener_cache.get_meta(db, "seed_complete") is None
-    screener_cache.set_meta(db, "seed_complete", "1")
-    assert screener_cache.get_meta(db, "seed_complete") == "1"
+def test_read_signals_on_a_fresh_database_is_empty(market_data):
+    # A screen served before the first refresh must read empty, not error.
+    assert screener_cache.read_signals() == []
+    assert screener_cache.signal_count() == 0
 
 
 from features.screener import compute
@@ -213,89 +197,113 @@ def test_run_combined_equal_weight_and_fallback():
 
 import datetime
 
+from core.data import InstrumentRef
+
 from features.screener import data as screener_data
 
 
 def test_filter_universe_keeps_only_nse500_equities():
     # Kite instruments() uses segment "NSE" (not "NSE-EQ") for cash equities.
-    instruments = [
-        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "segment": "NSE"},
-        {"tradingsymbol": "TCS", "instrument_token": 2, "segment": "NSE"},
-        {"tradingsymbol": "NIFTY 50", "instrument_token": 3, "segment": "INDICES"},
-        {"tradingsymbol": "PENNYX", "instrument_token": 4, "segment": "NSE"},
-    ]
+    instruments = pd.DataFrame([
+        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "segment": "NSE", "exchange": "NSE"},
+        {"tradingsymbol": "TCS", "instrument_token": 2, "segment": "NSE", "exchange": "NSE"},
+        {"tradingsymbol": "NIFTY 50", "instrument_token": 3, "segment": "INDICES", "exchange": "NSE"},
+        {"tradingsymbol": "PENNYX", "instrument_token": 4, "segment": "NSE", "exchange": "NSE"},
+    ])
     out = screener_data.filter_universe(instruments, "NSE", {"RELIANCE", "TCS"})
-    assert set(out["tradingsymbol"]) == {"RELIANCE", "TCS"}
-    assert 3 not in list(out["instrument_token"])  # index dropped
-    assert 4 not in list(out["instrument_token"])  # non-member dropped
+    assert {r.symbol for r in out} == {"RELIANCE", "TCS"}
+    tokens = {r.token for r in out}
+    assert 3 not in tokens  # index dropped
+    assert 4 not in tokens  # non-member dropped
 
 
-def test_refresh_appends_only_new_dated_candles(db, monkeypatch, tmp_path):
-    # Point settings at the temp cache DB.
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_data.settings, "get_settings", lambda: s)
+def test_filter_universe_on_an_empty_master_is_empty():
+    assert screener_data.filter_universe(pd.DataFrame(), "NSE", {"X"}) == []
 
-    universe = pd.DataFrame(
-        {"tradingsymbol": ["RELIANCE"], "instrument_token": [1]}
+
+def test_build_universe_reads_the_instrument_master(market_data, stub_provider, tmp_path):
+    stub_provider.set_instruments("NSE", {"RELIANCE": 1, "PENNYX": 2})
+    csv = tmp_path / "nse500.csv"
+    csv.write_text("Symbol\nRELIANCE\n")
+    conf = screener_settings.get_settings()
+    conf["universe"]["constituents_path"] = str(csv)
+
+    universe = screener_data.filter_universe(
+        market_data.get_instruments("NSE"),
+        conf["universe"]["segment"],
+        screener_data.load_nse500(str(csv), "Symbol"),
     )
-    # Seed one candle at 2026-01-01.
-    screener_cache.upsert_candles(
-        db, "RELIANCE",
-        [{"date": "2026-01-01", "open": 1, "high": 2, "low": 1, "close": 1.5, "volume": 5}],
-    )
+    assert [r.symbol for r in universe] == ["RELIANCE"]
 
-    calls = {}
 
-    def fake_fetch(token, from_date, to_date):
-        calls["from_date"] = from_date
-        # Kite would only return candles from `from_date` onward.
-        return [
-            {"date": datetime.date(2026, 1, 2), "open": 1.5, "high": 2.5,
-             "low": 1.4, "close": 2.0, "volume": 6}
-        ]
+def test_refresh_appends_only_new_dated_candles(market_data, stub_provider):
+    universe = [InstrumentRef(symbol="RELIANCE", token=1)]
+    stub_provider.set_series("RELIANCE", datetime.date(2026, 1, 1), [1.5])
+    screener_data.seed_history(universe=universe, today=datetime.date(2026, 1, 1))
+
+    # A new bar lands upstream.
+    stub_provider.set_series("RELIANCE", datetime.date(2026, 1, 1), [1.5, 2.0])
+    stub_provider.candle_calls.clear()
 
     result = screener_data.refresh_ohlc(
-        universe_df=universe, fetch=fake_fetch, today=datetime.date(2026, 1, 2)
+        universe=universe, today=datetime.date(2026, 1, 2)
     )
+
     # Incremental fetch starts strictly after the last stored date.
-    assert calls["from_date"] == datetime.date(2026, 1, 2)
-    df = screener_cache.read_candles(db, "RELIANCE")
-    assert list(df["date"]) == ["2026-01-01", "2026-01-02"]  # appended, not backfilled
+    assert stub_provider.candle_calls[0][1] == datetime.date(2026, 1, 2)
+    df = market_data.get_history(
+        "RELIANCE", start=datetime.date(2026, 1, 1), end=datetime.date(2026, 1, 2),
+        refresh=False,
+    )
+    assert [d.date().isoformat() for d in df.index] == ["2026-01-01", "2026-01-02"]
     assert result["updated"] == 1
 
 
-def test_refresh_skips_and_logs_missing_symbol(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_data.settings, "get_settings", lambda: s)
-    universe = pd.DataFrame({"tradingsymbol": ["DELISTED"], "instrument_token": [99]})
-
-    def boom(token, from_date, to_date):
-        raise Exception("instrument not found")
-
+def test_refresh_skips_and_logs_missing_symbol(market_data, stub_provider):
+    stub_provider.fail_symbols.add("DELISTED")
     result = screener_data.refresh_ohlc(
-        universe_df=universe, fetch=boom, today=datetime.date(2026, 1, 2)
+        universe=[InstrumentRef(symbol="DELISTED", token=99)],
+        today=datetime.date(2026, 1, 2),
     )
     assert result["skipped"] == 1  # did not crash
+
+
+def test_refresh_recomputes_signals_only_for_updated_symbols(
+    market_data, stub_provider
+):
+    today = datetime.date(2026, 1, 20)
+    stub_provider.set_series(
+        "AAA", today - datetime.timedelta(days=40), [100.0 + i for i in range(41)]
+    )
+    universe = [InstrumentRef(symbol="AAA", token=1), InstrumentRef(symbol="EMPTY", token=2)]
+
+    screener_data.seed_history(universe=universe, today=today)
+
+    rows = screener_cache.read_signals()
+    assert [r["symbol"] for r in rows] == ["AAA"]  # EMPTY had no candles to store
+    # Every registered strategy is scored for every cached symbol, as production
+    # does; a strategy with too little history scores null rather than erroring.
+    assert set(rows[0]["scores"]) == set(engine.REGISTRY)
+    assert set(rows[0]["passes"]) == set(engine.REGISTRY)
+    assert rows[0]["as_of_date"] == today.isoformat()
 
 
 from features.screener import service as screener_service
 
 
-def _seed_signals(db):
+def _seed_signals():
     # Every cached symbol carries ALL registered strategies, exactly as
     # production does (build_signals_row computes every strategy per symbol).
     # AAA passes only ma_crossover, BBB passes only breakout.
     screener_cache.upsert_signal(
-        db, "AAA", "2026-01-03",
+        "AAA", "2026-01-03",
         {"ma_crossover": 0.9, "momentum_12_1": 0.5, "breakout": 0.1,
          "rsi_reversion": 0.3, "high_52w": 0.4},
         {"ma_crossover": True, "momentum_12_1": False, "breakout": False,
          "rsi_reversion": False, "high_52w": False},
     )
     screener_cache.upsert_signal(
-        db, "BBB", "2026-01-03",
+        "BBB", "2026-01-03",
         {"ma_crossover": 0.2, "momentum_12_1": 0.6, "breakout": 0.8,
          "rsi_reversion": 0.7, "high_52w": 0.5},
         {"ma_crossover": False, "momentum_12_1": False, "breakout": True,
@@ -303,11 +311,8 @@ def _seed_signals(db):
     )
 
 
-def test_scan_reads_cache_without_recomputing(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    _seed_signals(db)
+def test_scan_reads_cache_without_recomputing(market_data, monkeypatch):
+    _seed_signals()
 
     calls = {"n": 0}
     real = compute.build_signals_row
@@ -323,22 +328,26 @@ def test_scan_reads_cache_without_recomputing(db, monkeypatch):
     assert {r["symbol"] for r in out["results"]} == {"AAA", "BBB"}
 
 
-def test_scan_payload_is_json_serializable(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    _seed_signals(db)
+def test_scan_payload_is_json_serializable(market_data):
+    _seed_signals()
     out = screener_service.run_scan()
     json.dumps(out)  # must not raise
 
 
-def test_status_reports_seed_state(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    screener_cache.set_meta(db, "seed_complete", "1")
+def test_status_reports_seed_state(market_data, stub_provider):
+    stub_provider.set_series("AAA", datetime.date(2026, 1, 1), [1.0])
+    screener_data.seed_history(
+        universe=[InstrumentRef(symbol="AAA", token=1)], today=datetime.date(2026, 1, 1)
+    )
+
     status = screener_service.get_status()
+
+    # Same payload the frontend's "last updated" indicator has always read,
+    # now sourced from the shared data layer.
     assert status["seed_complete"] is True
+    assert status["symbol_count"] == 1
+    assert status["last_updated"] is not None
+    assert status["refreshing"] is False
     json.dumps(status)
 
 
@@ -350,37 +359,22 @@ def test_routes_module_exposes_all_endpoints():
 
 
 # ── Post-review hardening ────────────────────────────────────────────────────
-def test_run_scan_unknown_strategy_raises_value_error(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
-    _seed_signals(db)
+def test_run_scan_unknown_strategy_raises_value_error(market_data):
+    _seed_signals()
     # A misspelled / unregistered strategy is a client error, not a 500.
     with pytest.raises(ValueError):
         screener_service.run_scan(strategies=["ma_crossover", "momentum"])  # typo
 
 
-def test_run_scan_drops_registered_but_uncached_strategy(db, monkeypatch):
-    s = screener_settings.get_settings()
-    s["data"]["cache_path"] = db
-    monkeypatch.setattr(screener_service.settings, "get_settings", lambda: s)
+def test_run_scan_drops_registered_but_uncached_strategy(market_data):
     # Only ma_crossover cached — simulates a registered strategy not yet seeded.
-    screener_cache.upsert_signal(db, "AAA", "2026-01-03",
+    screener_cache.upsert_signal("AAA", "2026-01-03",
                                  {"ma_crossover": 0.9}, {"ma_crossover": True})
-    screener_cache.upsert_signal(db, "BBB", "2026-01-03",
+    screener_cache.upsert_signal("BBB", "2026-01-03",
                                  {"ma_crossover": 0.2}, {"ma_crossover": False})
     out = screener_service.run_scan(strategies=["ma_crossover", "breakout"])
     assert out["selected"] == ["ma_crossover"]  # breakout dropped, no KeyError/500
     json.dumps(out)
-
-
-def test_cache_uses_wal_journal(db):
-    import sqlite3
-
-    conn = sqlite3.connect(db)
-    mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
-    conn.close()
-    assert mode.lower() == "wal"  # read-during-refresh must not block
 
 
 def test_run_individual_nan_score_serializes_as_null():

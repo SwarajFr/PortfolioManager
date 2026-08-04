@@ -1,20 +1,19 @@
-"""Data layer: Kite instruments → NSE500 universe, and the three-layer OHLC
-cache orchestration (seed once, incremental append per refresh). Decoupled from
-screening: screens never call anything here."""
+"""Screener universe construction and refresh orchestration.
+
+Fetching, caching and rate-limiting moved to `core.data`. What stays here is
+genuinely screener-specific: which symbols are in scope, and recomputing signals
+for the symbols that received a new bar.
+"""
 from __future__ import annotations
 
 import datetime
-import logging
-import time
 
 import pandas as pd
 
-from core.kite import get_kite
+from core.data import InstrumentRef, get_market_data
 
 from . import cache, compute, settings
 from .engine import build_strategies
-
-logger = logging.getLogger(__name__)
 
 
 # ── Universe ─────────────────────────────────────────────────────────────────
@@ -30,123 +29,76 @@ def _passes_liquidity_filter(symbol: str, members: set[str]) -> bool:
 
 
 def filter_universe(
-    instruments: list[dict], segment: str, members: set[str]
-) -> pd.DataFrame:
-    rows = [
-        {"tradingsymbol": i["tradingsymbol"], "instrument_token": i["instrument_token"]}
-        for i in instruments
-        if i.get("segment") == segment
-        and _passes_liquidity_filter(i["tradingsymbol"], members)
+    instruments: pd.DataFrame, segment: str, members: set[str]
+) -> list[InstrumentRef]:
+    if instruments.empty:
+        return []
+    rows = instruments[instruments["segment"] == segment]
+    return [
+        InstrumentRef(
+            symbol=str(r.tradingsymbol),
+            token=int(r.instrument_token),
+            exchange=str(r.exchange),
+            segment=str(r.segment),
+        )
+        for r in rows.itertuples()
+        if _passes_liquidity_filter(str(r.tradingsymbol), members)
     ]
-    return pd.DataFrame(rows, columns=["tradingsymbol", "instrument_token"])
 
 
-def build_universe() -> pd.DataFrame:
+def build_universe() -> list[InstrumentRef]:
     conf = settings.get_settings()["universe"]
     members = load_nse500(conf["constituents_path"], conf["membership_column"])
-    instruments = get_kite().instruments()
+    instruments = get_market_data().get_instruments(conf["exchange"])
     return filter_universe(instruments, conf["segment"], members)
 
 
 # ── Cache reads ──────────────────────────────────────────────────────────────
-def _cache_path() -> str:
-    return settings.get_settings()["data"]["cache_path"]
-
-
-def read_ohlc(symbol: str) -> pd.DataFrame:
-    df = cache.read_candles(_cache_path(), symbol)
-    if not df.empty:
-        df = df.set_index(pd.to_datetime(df["date"]))
-    return df
-
-
 def last_updated() -> str | None:
-    return cache.get_meta(_cache_path(), "last_updated")
+    return get_market_data().last_refreshed()
 
 
-# ── Fetch + refresh ──────────────────────────────────────────────────────────
-def _default_fetch(token: int, from_date, to_date) -> list[dict]:
-    return get_kite().historical_data(token, from_date, to_date, "day")
-
-
-def _normalize_rows(records: list[dict]) -> list[dict]:
-    out = []
-    for r in records:
-        d = r["date"]
-        d = d.date() if isinstance(d, datetime.datetime) else d
-        out.append({
-            "date": d.isoformat() if hasattr(d, "isoformat") else str(d),
-            "open": r["open"], "high": r["high"], "low": r["low"],
-            "close": r["close"], "volume": r.get("volume", 0),
-        })
-    return out
-
-
-def _recompute_signal(path: str, symbol: str, strategies: list) -> None:
-    df = cache.read_candles(path, symbol)
+# ── Refresh ──────────────────────────────────────────────────────────────────
+def _recompute_signal(symbol: str, strategies: list) -> None:
+    """Recompute and store one symbol's signal row from its cached candles."""
+    df = get_market_data().get_history(symbol, refresh=False)
     if df.empty:
         return
     row = compute.build_signals_row(df, strategies)
-    scores = {n: v["score"] for n, v in row.items()}
-    passes = {n: v["pass"] for n, v in row.items()}
-    cache.upsert_signal(path, symbol, str(df["date"].iloc[-1]), scores, passes)
+    cache.upsert_signal(
+        symbol,
+        df.index[-1].date().isoformat(),
+        {n: v["score"] for n, v in row.items()},
+        {n: v["pass"] for n, v in row.items()},
+    )
 
 
-def _run(universe_df, fetch, today, seed: bool) -> dict:
+def _run(
+    universe: list[InstrumentRef] | None,
+    today: datetime.date | None,
+    seed: bool,
+) -> dict:
     conf = settings.get_settings()
-    path = conf["data"]["cache_path"]
-    cache.init(path)
-    rps = conf["data"]["kite_rate_limit_rps"]
-    lookback = conf["data"]["seed_lookback_days"]
-    delay = (1.0 / rps) if (rps and fetch is None) else 0.0
-
-    if universe_df is None:
-        universe_df = build_universe()
-    if fetch is None:
-        fetch = _default_fetch
-    if today is None:
-        today = datetime.date.today()
+    cache.init()
+    if universe is None:
+        universe = build_universe()
 
     strategies = build_strategies(conf)
-    updated = 0
-    skipped = 0
-
-    for _, r in universe_df.iterrows():
-        symbol = str(r["tradingsymbol"])
-        token = int(r["instrument_token"])
-        if seed:
-            from_date = today - datetime.timedelta(days=lookback)
-        else:
-            last = cache.last_candle_date(path, symbol)
-            if last is None:
-                from_date = today - datetime.timedelta(days=lookback)
-            else:
-                from_date = datetime.date.fromisoformat(last) + datetime.timedelta(days=1)
-        if from_date > today:
-            continue
-        try:
-            records = fetch(token, from_date, today)
-        except Exception as exc:  # delisted/removed → skip-and-log, never crash
-            logger.warning("screener refresh skipped %s: %s", symbol, exc)
-            skipped += 1
-            continue
-        new = cache.upsert_candles(path, symbol, _normalize_rows(records))
-        if new > 0:
-            _recompute_signal(path, symbol, strategies)
-            updated += 1
-        if delay:
-            time.sleep(delay)
-
-    cache.set_meta(path, "last_updated", datetime.datetime.now().isoformat(timespec="seconds"))
-    if seed:
-        cache.set_meta(path, "seed_complete", "1")
-    key = "seeded" if seed else "updated"
-    return {key: updated, "skipped": skipped}
+    report = get_market_data().refresh_history(
+        universe,
+        seed=seed,
+        today=today,
+        on_updated=lambda symbol: _recompute_signal(symbol, strategies),
+    )
+    return {
+        ("seeded" if seed else "updated"): report.updated,
+        "skipped": report.skipped,
+    }
 
 
-def seed_history(universe_df=None, fetch=None, today=None) -> dict:
-    return _run(universe_df, fetch, today, seed=True)
+def seed_history(universe=None, today=None) -> dict:
+    return _run(universe, today, seed=True)
 
 
-def refresh_ohlc(universe_df=None, fetch=None, today=None) -> dict:
-    return _run(universe_df, fetch, today, seed=False)
+def refresh_ohlc(universe=None, today=None) -> dict:
+    return _run(universe, today, seed=False)

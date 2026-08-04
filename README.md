@@ -63,6 +63,31 @@ via `POST /api/screener/refresh` — and only for symbols that received a new da
 screening endpoints then rank over that cache on **every request** and never call Kite directly, so
 changing strategies, weights, or K re-screens instantly against cached data.
 
+## Architecture
+
+Every feature reads market data through one **data service**. Nothing else in the app talks to the
+broker:
+
+```
+Portfolio  ·  Exit Signals  ·  Fragility  ·  Screener  ·  MCP tools  ·  Agent
+                                  │
+                            Data Service
+                                  │
+                      ┌───────────┴───────────┐
+                  Local cache            Kite Connect
+                   (SQLite)             (or any provider)
+```
+
+The service is the only place that decides where a value comes from. **Historical candles are
+cache-first** — a settled daily bar never changes, so it fetches only the part of a requested window
+that is missing and appends it to the store. **Holdings and live quotes always come from the broker**,
+since they are current account and market state.
+
+Underneath it are two swappable halves: *providers* (one class per upstream — Kite today; each
+declares which capabilities it supports and owns all vendor quirks, chunking and rate limiting) and
+*repositories* (SQLite persistence). Adding a data source is one new provider class; no feature
+changes.
+
 ## Tech Stack
 
 - Backend: FastAPI, Python (python 3.12 recommended ), Pandas, NumPy, SciPy, scikit-learn
@@ -72,7 +97,31 @@ changing strategies, weights, or K re-screens instantly against cached data.
 
 ## How to Run
 
-### Backend
+### Backend with Docker (easiest)
+
+Needs only Docker Desktop — no Python or uv on the host. Create `backend/.env` first (see the
+variables in the next section), then from the repo root:
+
+```bash
+docker compose up --build      # backend at http://localhost:8000
+```
+
+The source directory is bind-mounted, so edits hot-reload and both SQLite files
+(`settings.db`, `screener_cache.db`) stay on the host — your cached candles survive rebuilds
+and are shared with native runs.
+
+```bash
+docker compose run --rm backend pytest -q     # tests
+docker compose logs -f backend                # follow logs
+docker compose down                           # stop
+```
+
+Two notes:
+- The **frontend still runs on the host** (`npm run dev`). Only the backend is containerized.
+- The Agent tab reaches **Ollama on your host** via `host.docker.internal` — compose sets
+  `LLM_BASE_URL` for this, so no `.env` change is needed. Keep Ollama running as usual.
+
+### Backend natively
 
 Dependencies are managed with [uv](https://docs.astral.sh/uv/). Install it once:
 

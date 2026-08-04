@@ -20,7 +20,7 @@ const PAGES = {
 };
 
 export default function App() {
-  const [authenticated, setAuthenticated] = useState(null);
+  const [auth, setAuth] = useState(null);
   const [activeView, setActiveView] = useState("overview");
 
   useEffect(() => {
@@ -28,10 +28,10 @@ export default function App() {
 
     getAuthStatus()
       .then((status) => {
-        if (!cancelled) setAuthenticated(status);
+        if (!cancelled) setAuth(status);
       })
       .catch(() => {
-        if (!cancelled) setAuthenticated(false);
+        if (!cancelled) setAuth({ authenticated: false, userId: null });
       });
 
     return () => {
@@ -41,7 +41,7 @@ export default function App() {
 
   const ActivePage = PAGES[activeView] || PortfolioOverviewPage;
 
-  if (authenticated === null) {
+  if (auth === null) {
     return (
       <>
         <LoadingState title="Connecting" />
@@ -50,7 +50,7 @@ export default function App() {
     );
   }
 
-  if (!authenticated) {
+  if (!auth.authenticated) {
     return (
       <>
         <LoginPage />
@@ -61,7 +61,7 @@ export default function App() {
 
   return (
     <>
-      <AppShell activeView={activeView} onViewChange={setActiveView}>
+      <AppShell activeView={activeView} onViewChange={setActiveView} userId={auth.userId}>
         <Suspense fallback={<LoadingState title="Loading module" />}>
           <ActivePage />
         </Suspense>

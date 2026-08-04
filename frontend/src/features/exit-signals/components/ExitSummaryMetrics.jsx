@@ -12,7 +12,7 @@ export default function ExitSummaryMetrics({ summary }) {
   const activeActions = ["EXIT", "TRIM", "WATCH", "HOLD"]
     .filter((action) => Number(counts[action] || 0) > 0)
     .map((action) => `${counts[action]} ${action.toLowerCase()}`)
-    .join(" / ");
+    .join(" | ");
 
   const metrics = [
     {

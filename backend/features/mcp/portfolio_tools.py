@@ -1,7 +1,7 @@
 """MCP tool: live holdings, formatted and rounded."""
 from __future__ import annotations
 
-from features.portfolio.data import get_holdings
+from core.data import get_market_data
 
 from .guards import needs_kite
 
@@ -17,7 +17,7 @@ def portfolio_holdings() -> dict:
     Returns rows sorted by market value (largest first). Amounts are rounded;
     instrument tokens and raw broker fields are omitted for a compact payload.
     """
-    df = get_holdings()
+    df = get_market_data().get_holdings()
     if df is None or df.empty:
         return {"holdings": [], "totals": _empty_totals()}
 

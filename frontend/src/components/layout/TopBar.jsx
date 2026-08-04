@@ -8,7 +8,7 @@ function emitDashboardEvent(name) {
 const railButton =
   "inline-flex h-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 font-mono text-[0.625rem] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)] transition hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]";
 
-export default function TopBar({ activeItem, onViewChange }) {
+export default function TopBar({ activeItem, onViewChange, userId }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-rail)] px-4 py-3 sm:px-6 lg:h-screen lg:w-[212px] lg:shrink-0 lg:border-b-0 lg:border-r lg:px-4 lg:py-5">
       <div className="flex w-full flex-wrap items-center gap-3 lg:h-full lg:flex-col lg:items-stretch lg:gap-6">
@@ -69,8 +69,11 @@ export default function TopBar({ activeItem, onViewChange }) {
           </button>
           <div className="hidden items-center gap-1.5 pt-1 lg:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-profit)]" />
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
-              Kite · Live
+            <span
+              className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+              title={userId ? `Scoped to Zerodha account ${userId}` : undefined}
+            >
+              {userId ? `Kite · ${userId}` : "Kite · Live"}
             </span>
           </div>
         </div>

@@ -2,15 +2,46 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import openai
 from openai import OpenAI
 
 from config import LLM_API_KEY, LLM_BASE_URL
+from features.advisor.settings import get_profile
 
 from . import settings, tools
 
+logger = logging.getLogger(__name__)
+
 _client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+
+
+def _profile_line() -> str:
+    """A one-line reminder of who is asking, appended to the system prompt.
+
+    Cheap enough to send every turn and it removes a whole class of wrong
+    answers — suggesting a stock the user has explicitly excluded, or a target
+    that ignores their risk appetite.
+    """
+    try:
+        profile = get_profile()
+    except Exception as exc:
+        logger.warning("investor profile unavailable: %s", exc)
+        return ""
+
+    parts = [
+        f"risk tolerance {profile['risk_tolerance']}",
+        f"default horizon {profile['default_horizon_months']} months",
+        f"default target {profile['default_target_gain_pct']}%",
+    ]
+    if profile.get("capital_available"):
+        parts.append(f"capital available ₹{profile['capital_available']:,.0f}")
+    if profile.get("avoid_symbols"):
+        parts.append("never suggest " + ", ".join(profile["avoid_symbols"]))
+    if profile.get("notes"):
+        parts.append(f"their note: {profile['notes']}")
+    return "\n\nABOUT THIS USER: " + "; ".join(parts) + "."
 
 
 def _assistant_dict(msg) -> dict:
@@ -36,7 +67,7 @@ def run_chat(history: list[dict]) -> dict:
     Returns {"reply", "tool_calls", "stop"} on success, or {"error", "message"}.
     """
     conf = settings.get_settings()
-    msgs = [{"role": "system", "content": conf["system_prompt"]}, *history]
+    msgs = [{"role": "system", "content": conf["system_prompt"] + _profile_line()}, *history]
     trace: list[dict] = []
     try:
         for _ in range(int(conf["max_tool_iterations"])):

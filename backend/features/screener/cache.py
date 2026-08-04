@@ -1,75 +1,47 @@
+"""Screener signal store: the latest {score, pass} row per symbol.
+
+Candles, instruments and refresh metadata moved to `core.data`; what is left
+here is screener-owned derived data. It shares the market-data database file on
+purpose — signals are computed from those candles and are meaningless without
+them, so one file keeps the two consistent and backed up together.
+"""
 from __future__ import annotations
 
+import contextlib
 import json
-import sqlite3
+from collections.abc import Generator
+from sqlite3 import Connection
 
-import pandas as pd
+from core.data import get_market_data
+from core.data.repositories.db import connect
 
-_CANDLE_COLS = ("date", "open", "high", "low", "close", "volume")
-
-
-def _connect(path: str) -> sqlite3.Connection:
-    # WAL lets a screen read concurrently with the background refresh's writes
-    # without "database is locked"; the 5s busy timeout absorbs brief contention.
-    conn = sqlite3.connect(path, timeout=5.0)
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+_DDL = (
+    "CREATE TABLE IF NOT EXISTS signals ("
+    "symbol TEXT PRIMARY KEY, as_of_date TEXT, "
+    "scores_json TEXT, passes_json TEXT)"
+)
 
 
-def init(path: str) -> None:
-    with _connect(path) as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS candles ("
-            "symbol TEXT, date TEXT, open REAL, high REAL, low REAL, "
-            "close REAL, volume REAL, PRIMARY KEY (symbol, date))"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS signals ("
-            "symbol TEXT PRIMARY KEY, as_of_date TEXT, "
-            "scores_json TEXT, passes_json TEXT)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-        )
+def _path() -> str:
+    return get_market_data().config.db_path
 
 
-def upsert_candles(path: str, symbol: str, rows: list[dict]) -> int:
-    if not rows:
-        return 0
-    with _connect(path) as conn:
-        before = conn.total_changes
-        conn.executemany(
-            "INSERT OR IGNORE INTO candles "
-            "(symbol, date, open, high, low, close, volume) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                (symbol, r["date"], r["open"], r["high"], r["low"], r["close"], r["volume"])
-                for r in rows
-            ],
-        )
-        return conn.total_changes - before
+@contextlib.contextmanager
+def _conn() -> Generator[Connection, None, None]:
+    """Open the shared database with the signals table guaranteed to exist, so
+    a screen served before the first refresh reads empty rather than erroring."""
+    with connect(_path()) as conn:
+        conn.execute(_DDL)
+        yield conn
 
 
-def last_candle_date(path: str, symbol: str) -> str | None:
-    with _connect(path) as conn:
-        row = conn.execute(
-            "SELECT MAX(date) FROM candles WHERE symbol = ?", (symbol,)
-        ).fetchone()
-    return row[0] if row else None
+def init() -> None:
+    with _conn():
+        pass
 
 
-def read_candles(path: str, symbol: str) -> pd.DataFrame:
-    with _connect(path) as conn:
-        rows = conn.execute(
-            "SELECT date, open, high, low, close, volume FROM candles "
-            "WHERE symbol = ? ORDER BY date ASC",
-            (symbol,),
-        ).fetchall()
-    return pd.DataFrame(rows, columns=list(_CANDLE_COLS))
-
-
-def upsert_signal(path: str, symbol: str, as_of_date: str, scores: dict, passes: dict) -> None:
-    with _connect(path) as conn:
+def upsert_signal(symbol: str, as_of_date: str, scores: dict, passes: dict) -> None:
+    with _conn() as conn:
         conn.execute(
             "INSERT INTO signals (symbol, as_of_date, scores_json, passes_json) "
             "VALUES (?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET "
@@ -79,8 +51,8 @@ def upsert_signal(path: str, symbol: str, as_of_date: str, scores: dict, passes:
         )
 
 
-def read_signals(path: str) -> list[dict]:
-    with _connect(path) as conn:
+def read_signals() -> list[dict]:
+    with _conn() as conn:
         rows = conn.execute(
             "SELECT symbol, as_of_date, scores_json, passes_json FROM signals"
         ).fetchall()
@@ -95,22 +67,7 @@ def read_signals(path: str) -> list[dict]:
     ]
 
 
-def get_meta(path: str, key: str) -> str | None:
-    with _connect(path) as conn:
-        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
-    return row[0] if row else None
-
-
-def set_meta(path: str, key: str, value: str) -> None:
-    with _connect(path) as conn:
-        conn.execute(
-            "INSERT INTO meta (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
-        )
-
-
-def symbol_count(path: str) -> int:
-    with _connect(path) as conn:
-        row = conn.execute("SELECT COUNT(DISTINCT symbol) FROM candles").fetchone()
+def signal_count() -> int:
+    with _conn() as conn:
+        row = conn.execute("SELECT COUNT(*) FROM signals").fetchone()
     return int(row[0]) if row else 0

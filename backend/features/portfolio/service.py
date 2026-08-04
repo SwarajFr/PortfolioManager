@@ -1,9 +1,8 @@
-from .data import get_holdings
+from core.data import get_market_data
+
 from .compute import compute_overview
 from .settings import get_settings
 
-def get_overview():
-    df = get_holdings()
-    config = get_settings()
 
-    return compute_overview(df, config)
+def get_overview():
+    return compute_overview(get_market_data().get_holdings(), get_settings())

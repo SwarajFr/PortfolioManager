@@ -1,0 +1,20 @@
+# Host venv is Windows-native and would be useless (and huge) in a Linux image.
+.venv/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state, not image content: the databases arrive via the bind mount and
+# credentials via env_file. Keeps ~33 MB and the Kite secrets out of the layers.
+*.db
+*.db-shm
+*.db-wal
+*.db.bak
+.env
+
+Dockerfile
+.dockerignore
