@@ -1,3 +1,16 @@
+/**
+ * Tone name → Tailwind classes. The two maps share their key set, so a tone
+ * resolved once (see `utils/finance.js`) renders consistently as either text or
+ * a badge.
+ *
+ * Classes are written out in full rather than composed, because Tailwind scans
+ * source for complete class strings — a template literal like
+ * `text-[var(--${tone})]` produces nothing at build time.
+ *
+ * `negative` and `danger` deliberately share `--loss`: they mean different
+ * things (a loss vs. a breached limit) but read as the same red, and keeping
+ * them separate lets one change later without touching the other.
+ */
 export const TONE_STYLES = {
   positive: "text-[var(--profit)]",
   negative: "text-[var(--loss)]",

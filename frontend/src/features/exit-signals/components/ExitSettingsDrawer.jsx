@@ -1,3 +1,22 @@
+/**
+ * Editor for exit-signal weights and action thresholds.
+ *
+ * The saved config is only *points per band* — a bare list of numbers per KPI.
+ * The user cannot tune those without knowing which band each slot means, so the
+ * labels in `KPI_STRUCTURE` supply the missing half.
+ *
+ * **Those labels restate boundaries that live in the backend.** The band edges
+ * (-5/-10/-20 %, ratios 1.2/1.5, weights 8/12 %) are hardcoded in
+ * `features/exit/compute.py`, not sent over the wire, so this constant is a
+ * hand-maintained mirror. It matches the scorer as written. Nothing enforces
+ * that, so changing a boundary in `compute.py` without editing here leaves the
+ * drawer confidently mislabelling what each input does — the numbers keep
+ * working, only the explanation goes wrong, which is the hard kind to notice.
+ *
+ * `index` is explicit rather than implied by array position because the visual
+ * order is the editing order, and decoupling the two means reordering the rows
+ * for readability cannot silently repoint an input at the wrong band.
+ */
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import Button from "../../../components/ui/Button";

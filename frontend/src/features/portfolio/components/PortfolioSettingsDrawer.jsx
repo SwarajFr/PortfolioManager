@@ -1,3 +1,32 @@
+/**
+ * Editor for the overview config: group membership, target bands, and caps.
+ *
+ * The whole drawer edits one `config` object and saves it in a single PUT, so
+ * nothing is persisted until the user commits. That is what makes destructive
+ * edits (removing a group, reassigning every unassigned stock) safe to offer —
+ * closing without saving discards them.
+ *
+ * Two structural choices worth knowing before editing this file:
+ *
+ * - **Clone-then-mutate.** `updateConfig` hands the updater a `structuredClone`
+ *   of the current config and stores whatever comes back. The updaters read as
+ *   plain mutation (`delete draft.groups[name]`) while React still sees a new
+ *   object every time, so nested changes cannot be missed by identity checks.
+ *   Do not mutate `config` directly — only the draft inside `updateConfig`.
+ *
+ * - **`symbolGroup` is an inverted index**, rebuilt only when config changes.
+ *   The alternative — scanning every group's array per symbol — would run on
+ *   each keystroke of the filter, since the sort comparator needs a symbol's
+ *   group for both sides of every comparison.
+ *
+ * The filter is a `useDeferredValue` because that sort re-runs the whole list;
+ * deferring it keeps typing responsive and lets the stale list paint meanwhile.
+ *
+ * Saving is blocked while any holding is unassigned. The backend would accept
+ * it, but `compute.py` buckets unassigned symbols into a synthetic "Unassigned"
+ * group that has no target band — so the overview would show a group the user
+ * cannot act on. Better to refuse here than to render something unfixable.
+ */
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Button from "../../../components/ui/Button";
@@ -118,6 +147,10 @@ export default function PortfolioSettingsDrawer({ onClose, onSaved }) {
     });
   };
 
+  // Fires per keystroke, so a rename happens one character at a time. It looks
+  // wrong but is correct: each pass carries the membership array and target
+  // band across to the new key, so no data is lost mid-word. Debouncing would
+  // need the input to hold its own draft state, which is not worth it here.
   const renameGroup = (oldName, newName) => {
     if (!newName || newName === oldName) return;
     updateConfig((draft) => {
