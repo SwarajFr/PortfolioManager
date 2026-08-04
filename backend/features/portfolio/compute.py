@@ -1,4 +1,24 @@
+"""Pure portfolio arithmetic: holdings frame + config in, overview payload out.
+
+No I/O and no settings lookup — `service.py` supplies both — which is what lets
+the allocation and concentration rules be tested against a hand-built frame.
+
+The two rule families answer different questions and deliberately do not share
+code:
+
+* **Allocation** is about *intent*: each group has a target band, and the action
+  is the rupee amount that would bring it back inside that band. A group with no
+  configured target is reported, never actioned.
+* **Concentration** is about *risk*: top-5 and largest-holding caps are absolute
+  ceilings, so they only ever produce TRIM.
+
+Amounts are the distance to the *nearest edge* of the limit, not to its midpoint
+— the smallest trade that resolves the breach, since every trade costs.
+"""
+
+
 def _empty_overview():
+    """Zeroed payload so an empty portfolio renders an empty state, not a 500."""
     return {
         "health": {
             "total_value": 0,

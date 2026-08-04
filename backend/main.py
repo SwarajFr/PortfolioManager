@@ -1,3 +1,13 @@
+"""Composition root: the only module that knows the whole application exists.
+
+Every feature is self-contained behind its own router, so wiring is the entire
+job here — there is no logic to read, and that is deliberate. A new feature
+appears in exactly two lines (import, `include_router`) and nowhere else.
+
+The one genuine coupling is the lifespan: FastAPI runs only the lifespan it is
+constructed with, so the MCP session manager has to be handed to the parent app
+here. Miss it and the app still starts — MCP just fails at request time.
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

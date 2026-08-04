@@ -1,3 +1,14 @@
+"""Process-wide configuration read from the environment, once, at import.
+
+Module constants rather than a settings object: these are fixed for the life of
+the process (they come from `.env`), so a getter would imply a mutability that
+does not exist. Anything a *user* can change belongs in `core/settings_store.py`
+instead — the split is "who owns this value", not "what type is it".
+
+The Kite values are intentionally left as `None` when unset rather than
+defaulted, so a missing credential fails at the Kite call with a clear error
+instead of silently authenticating as nobody.
+"""
 import os
 from dotenv import load_dotenv
 

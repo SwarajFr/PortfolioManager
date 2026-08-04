@@ -1,3 +1,16 @@
+"""Portfolio settings: user-defined groups, target bands and concentration caps.
+
+Groups and targets are two halves of one structure that the UI edits separately,
+so they drift: renaming a group leaves its old target behind, and adding one
+leaves it with no target at all. `_normalize_settings` is the reconciliation
+step that runs on every write — it gives new groups a neutral `[0, 0]` band and
+drops targets whose group is gone, so `compute.py` can trust that a target
+lookup either matches a live group or is absent.
+
+Note the table name is the bare `"settings"` for historical reasons: this was
+the first feature, written before the per-feature naming convention existed.
+Renaming it would orphan every existing user's saved config.
+"""
 from core.settings_store import (
     load_settings,
     reset_settings as reset_stored_settings,

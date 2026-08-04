@@ -1,3 +1,24 @@
+"""Kite *session* lifecycle — the token, not the data.
+
+This module owns one `KiteConnect` instance and the question "are we logged in,
+and as whom". It deliberately exposes no market data: everything that reads
+prices, quotes or holdings goes through `core.data`, whose Kite provider borrows
+this session. Keeping the split means there is exactly one place that can hold a
+token and exactly one place that can spend it.
+
+Two rules the persistence has to respect:
+
+* **A token is only valid for its IST day.** Kite expires them around 06:00 IST,
+  so a restored prior-day token is dead weight that would fail on first use —
+  it is discarded rather than resumed, which turns a mid-day restart into a
+  no-op instead of a re-login.
+* **A session we cannot attribute is worthless.** Settings are scoped per
+  account, so a stored token with no `user_id` (written before account isolation
+  existed) cannot be used safely and is dropped.
+
+Persistence is best-effort throughout: a corrupt or missing `settings.db` must
+degrade to "please log in", never to a crash on startup.
+"""
 from datetime import datetime, timedelta, timezone
 
 from kiteconnect import KiteConnect

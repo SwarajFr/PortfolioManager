@@ -1,3 +1,13 @@
+"""Kite OAuth endpoints: status, login redirect, and the provider callback.
+
+The callback redirects to the frontend rather than returning JSON because Kite
+navigates the *browser* here — this is a page load, not an XHR, so the only
+useful response is somewhere for the user to land.
+
+All session work is delegated to `service.complete_login`; this module stays
+transport-only so the MCP login tool can reuse the same logic without going
+through HTTP.
+"""
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 

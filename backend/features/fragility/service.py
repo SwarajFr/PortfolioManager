@@ -1,3 +1,16 @@
+"""Orchestration for the fragility page: holdings + deep price history → engine.
+
+The engine is pure and takes returns, so everything that cannot be pure lives
+here: fetching, the prices→log-returns conversion, and the minimum-history
+filter.
+
+That filter is the subtle part. Correlation between two series is only
+meaningful over a shared window, so a ticker with less than `long_window` days
+of data would either poison the covariance estimate or silently shrink it via
+pairwise deletion. Dropping those tickers up front — and naming them in
+`tickers_excluded` — makes the exclusion visible in the response rather than a
+quiet distortion of the numbers.
+"""
 from __future__ import annotations
 
 import numpy as np

@@ -1,3 +1,14 @@
+"""HTTP surface for the screener: strategy metadata, screens, and refresh.
+
+The status-code split reflects whose fault the failure is. `/scan` turns
+`ValueError` into 400 because the service raises it for an unknown strategy
+name, which is the caller's input. `/refresh` returns 500 for anything, because
+by then the only failures left are broker or storage problems.
+
+`/scan` and `/individual` read the precomputed `signals` table and never fetch;
+only `/refresh` touches the network, which is what keeps a screen fast and
+usable on a cold token.
+"""
 from fastapi import APIRouter, HTTPException, Request
 
 from .service import (

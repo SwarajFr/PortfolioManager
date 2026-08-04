@@ -1,3 +1,21 @@
+"""Screener configuration: strategy parameters, screen defaults, and universe.
+
+Three groups with different owners. `strategies` holds the per-strategy
+parameters the compute functions read; `screener` holds the combining rules
+(how many strategies must agree, their relative weights, how scores are made
+comparable); `universe` decides which symbols are in scope at all.
+
+This table is one of the `_UNSCOPED_TABLES` — global rather than per-account —
+and that is a correctness requirement, not a shortcut. Strategy parameters feed
+the shared `signals` table, which stores one row per symbol; if two accounts
+could set different parameters, whichever refreshed last would leave the other
+reading signals computed under settings they never chose.
+
+Note `default_k` is intentionally a union type: the string `"all"` means a
+strict AND across every selected strategy, while an int means K-of-N. Storing
+"all" rather than a number keeps the strict screen correct when the user later
+adds or removes a strategy.
+"""
 from core.settings_store import (
     load_settings,
     reset_settings as reset_stored_settings,

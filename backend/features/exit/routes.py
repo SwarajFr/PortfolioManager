@@ -1,3 +1,9 @@
+"""HTTP surface for exit signals and their tuning.
+
+Settings responses are wrapped in `{"config": ...}` rather than returned bare so
+the payload has somewhere to grow — the same shape the portfolio router already
+uses, where a second key was needed later.
+"""
 from fastapi import APIRouter, Request
 from .service import get_exit_signals
 from .settings import get_settings, save_settings, reset_settings

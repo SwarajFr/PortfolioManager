@@ -1,3 +1,21 @@
+"""Exit-signal tuning: what each KPI is worth, and where the actions cut over.
+
+Two independent dials, both user-owned:
+
+* `function_scores` — the points a KPI contributes in each of its severity
+  bands, worst band last. The *boundaries* are not here: they are hardcoded in
+  `compute.py` (loss at -5/-10/-20 %, risk at 1.2x/1.5x the median, and so on).
+  So a list of *n* entries means that KPI has *n* bands, and editing it
+  re-weights the KPI without moving where the bands begin. The lists differ in
+  length because the KPIs genuinely differ in how many distinctions are useful.
+* `action_thresholds` — where the summed 0-100 score becomes EXIT / TRIM /
+  WATCH. Anything below the lowest is HOLD.
+
+Because the entries are weights rather than cut points, a list is only required
+to be as long as its KPI has bands; nothing checks that it ascends. A user who
+enters them out of order gets an odd but defensible scoring curve rather than a
+rejected save — this is a personal tuning knob, not an API contract.
+"""
 from core.settings_store import (
     load_settings,
     reset_settings as reset_stored_settings,

@@ -1,3 +1,10 @@
+"""Login orchestration — the one path from a request_token to a live session.
+
+Both entry points (the REST `/callback` route and the MCP login tool) funnel
+through `complete_login`, which is what makes "on account change, purge the
+caches" enforceable: there is a single place where the active account can
+change, so there is a single place that has to remember.
+"""
 from config import API_SECRET
 from core.data import get_market_data
 from core.identity import get_active_user

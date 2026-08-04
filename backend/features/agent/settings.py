@@ -1,3 +1,16 @@
+"""Agent configuration: which local model runs, and the prompt that fences it in.
+
+The system prompt is a *setting* rather than a constant because it is the main
+thing worth tuning when swapping models — a smaller model usually needs the
+rules stated more bluntly, not different code.
+
+`max_tool_iterations` is the loop guard. A model that keeps calling tools
+without producing an answer would otherwise run until the request times out, so
+the ceiling turns a confused model into a bounded, reportable failure.
+
+Saves merge over `_DEFAULTS`, so a payload that sets only `model` keeps the
+working prompt instead of blanking it.
+"""
 from core.settings_store import (
     load_settings,
     reset_settings as reset_stored_settings,

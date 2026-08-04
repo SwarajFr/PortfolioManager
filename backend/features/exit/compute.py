@@ -1,4 +1,4 @@
-﻿"""Pure computation layer for rule-based exit signals."""
+"""Pure computation layer for rule-based exit signals."""
 
 import numpy as np
 import pandas as pd

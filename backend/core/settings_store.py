@@ -1,3 +1,23 @@
+"""Per-feature, per-account settings persistence.
+
+One SQLite table per feature, one row per account. Features never see the
+storage: they call `load_settings(table, defaults)` and get their own dict back.
+
+The account scoping is the load-bearing part. Every table is keyed by the
+logged-in Zerodha `user_id` *unless* it appears in `_UNSCOPED_TABLES`, which
+makes that frozenset a security boundary rather than a convenience list — see
+its comment for why each member is safe to share.
+
+Both directions fail closed:
+
+* A **read** with no active user returns the caller's defaults, so a logged-out
+  process shows factory settings instead of the last account's.
+* A **write** with no active user raises `NoActiveUserError`, because silently
+  picking a row to overwrite is how one account's config lands on another's.
+
+Tables are created and migrated lazily on first touch, so there is no schema
+step to run and no ordering dependency between features at startup.
+"""
 from __future__ import annotations
 
 import copy
