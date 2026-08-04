@@ -159,7 +159,7 @@ the previous account's cached holdings in exactly one place.
 
 | | Needed for |
 |---|---|
-| **Docker Desktop** | the containerized backend (nothing else required on the host) |
+| **Docker Desktop** | the backend, containerized — this is the only piece Docker runs |
 | **[uv](https://docs.astral.sh/uv/)** | the native backend — installs Python 3.12 for you |
 | **Node.js 20.19+ or 22.12+** | the frontend, always run on the host (Vite 8's requirement) |
 | **Kite Connect API key** | from [developers.kite.trade](https://developers.kite.trade/) |
@@ -198,8 +198,15 @@ docker compose down                           # stop
 ```
 
 The source directory is bind-mounted, so edits hot-reload and both SQLite files stay on the host —
-cached candles survive rebuilds and are shared with native runs. Compose also points
-`LLM_BASE_URL` at `host.docker.internal`, since inside a container `localhost` is the container.
+cached candles survive rebuilds and are shared with native runs.
+
+> **Only the backend is containerized.** Compose defines a single service. The frontend still runs
+> on the host with `npm run dev`, and **Ollama is not containerized either — Docker will not
+> install it or pull a model for you.** Install Ollama on the host and pull the model yourself, as
+> in [Ask in plain English](#ask-in-plain-english). Compose points `LLM_BASE_URL` at
+> `host.docker.internal` so the container can reach back out to it, since inside a container
+> `localhost` means the container. Without Ollama running, the Agent tab returns `llm_unreachable`
+> and every other view works normally.
 
 </details>
 
