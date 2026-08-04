@@ -19,6 +19,7 @@ Two rules the persistence has to respect:
 Persistence is best-effort throughout: a corrupt or missing `settings.db` must
 degrade to "please log in", never to a crash on startup.
 """
+import contextlib
 from datetime import datetime, timedelta, timezone
 
 from kiteconnect import KiteConnect
@@ -42,13 +43,11 @@ def _today_ist() -> str:
 def _persist_token(token: str, user_id: str) -> None:
     # Best-effort: a broken/missing settings.db must never break auth.
     # Only ever one token at rest — a new login overwrites the previous one.
-    try:
+    with contextlib.suppress(Exception):
         save_settings(
             _SESSION_TABLE,
             {"access_token": token, "user_id": user_id, "ist_date": _today_ist()},
         )
-    except Exception:
-        pass
 
 
 def _activate(token: str, user_id: str) -> None:
@@ -58,10 +57,8 @@ def _activate(token: str, user_id: str) -> None:
     kite.set_access_token(token)
     set_active_user(user_id)
     # Best-effort, like token persistence: a settings.db problem must not break auth.
-    try:
+    with contextlib.suppress(Exception):
         claim_legacy_rows(user_id)
-    except Exception:
-        pass
 
 
 def _load_persisted_token() -> None:
@@ -79,7 +76,7 @@ def _load_persisted_token() -> None:
             and data.get("ist_date") == _today_ist()
         ):
             _activate(data["access_token"], data["user_id"])
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt settings.db must degrade to 'log in', not crash at import
         pass
 
 

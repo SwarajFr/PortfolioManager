@@ -43,7 +43,7 @@ async def scan(request: Request):
             fallback_n=body.get("fallback_n"),
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/refresh")
@@ -51,7 +51,7 @@ def refresh():
     try:
         return trigger_refresh()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/status")

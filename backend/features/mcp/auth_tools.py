@@ -38,7 +38,7 @@ def kite_complete_login(request_token: str) -> dict:
     try:
         result = complete_login(request_token)
         return {"status": "authenticated", "user_id": result.get("user_id")}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - any login failure is reported to the caller with a retry URL
         # Keep the real failure reason; still hand back a login_url to retry.
         return {"status": "error", "message": str(e), "login_url": kite.login_url()}
 

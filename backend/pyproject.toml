@@ -19,6 +19,50 @@ dependencies = [
 [tool.uv]
 package = false
 
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Chosen rather than inherited: each family below has caught something real in
+# this codebase or guards a convention it already follows. Families that fight
+# deliberate design (DTZ's tz-aware dates — market bars are naive by
+# definition; S's bandit heuristics on a local single-user app) are left off,
+# because a linter nobody can satisfy is one everybody learns to ignore.
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes: real bugs (undefined names, unused imports)
+    "I",        # import ordering, so diffs stay about content
+    "UP",       # pyupgrade: this targets 3.12, so old idioms are just noise
+    "B",        # bugbear: mutable defaults, loop-variable capture
+    "C4",       # comprehension clarity
+    "SIM",      # simplifications that genuinely read better
+    "PIE",
+    "BLE",      # blind except -- see per-file-ignores for where it is intended
+    "RUF",
+]
+ignore = [
+    "E501",     # line length is formatter's business, not the linter's
+    "RUF012",   # ClassVar annotations on plain config dicts add noise here
+    # The comment style here uses em dashes and box-drawing section rules
+    # ("# -- history ----"). That is house style, not a homoglyph mistake.
+    "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.isort]
+# Without this, `from x import (a, b as c)` is split into one statement per
+# alias -- three stanzas where the settings modules had one readable import.
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+# Route handlers convert *any* failure into an HTTP status. That is the whole
+# job of the layer, and FastAPI's own idiom, so a blind except is correct here
+# rather than merely tolerated.
+"features/*/routes.py" = ["BLE001"]
+# Tests import after mutating settings_store.DB_PATH -- see conftest.py for why
+# that ordering is load-bearing.
+"tests/*" = ["E402"]
+
 [tool.pytest.ini_options]
 # Run from backend/; put the project root on sys.path so `features...` imports resolve.
 pythonpath = ["."]
@@ -27,4 +71,5 @@ testpaths = ["tests"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.16.1",
 ]

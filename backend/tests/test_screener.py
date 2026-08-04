@@ -12,8 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from features.screener import settings as screener_settings
-from features.screener import cache as screener_cache
+from features.screener import cache as screener_cache, settings as screener_settings
 
 
 def test_defaults_have_all_config_keys():
@@ -198,7 +197,6 @@ def test_run_combined_equal_weight_and_fallback():
 import datetime
 
 from core.data import InstrumentRef
-
 from features.screener import data as screener_data
 
 

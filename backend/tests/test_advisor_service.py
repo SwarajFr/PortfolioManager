@@ -10,13 +10,12 @@ from __future__ import annotations
 import datetime
 
 import pytest
+from conftest import TODAY
 
 import core.identity as identity
 import core.settings_store as store
 from features.advisor import journal, service
 from features.screener import cache as screener_cache
-
-from conftest import TODAY
 
 USER = "AB1234"
 
@@ -82,12 +81,12 @@ def universe(account, market_data, stub_provider):
     prices = {"WILD": 25.0, "GOOD": 100.0, "SLOW": 500.0}
     for i, (symbol, base) in enumerate(prices.items()):
         stub_provider.set_series(symbol, _start(), _rising(base, base * 0.0005))
-        stub_provider.set_instruments("NSE", {symbol: 100 + i for symbol in prices})
+        stub_provider.set_instruments("NSE", dict.fromkeys(prices, 100 + i))
         screener_cache.upsert_signal(
             symbol,
             TODAY.isoformat(),
-            {name: 1.0 - i * 0.1 for name in STRATEGIES},
-            {name: True for name in STRATEGIES},
+            dict.fromkeys(STRATEGIES, 1.0 - i * 0.1),
+            dict.fromkeys(STRATEGIES, True),
         )
     # Prime the candle cache the way the login refresh would, so buy_ideas can
     # read it without touching the provider.

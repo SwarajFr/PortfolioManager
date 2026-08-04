@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import itertools
 import time
 
 import pytest
@@ -211,7 +212,7 @@ def test_chunk_range_covers_the_window_without_overlap():
     chunks = list(_chunk_range(start, end, 4))
     assert chunks[0][0] == start
     assert chunks[-1][1] == end
-    for (_, prev_end), (next_start, _) in zip(chunks, chunks[1:]):
+    for (_, prev_end), (next_start, _) in itertools.pairwise(chunks):
         assert next_start == prev_end + datetime.timedelta(days=1)
     assert all((e - s).days < 4 for s, e in chunks)
 

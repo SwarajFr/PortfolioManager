@@ -123,8 +123,8 @@ def trailing_return_pct(df: pd.DataFrame, months: float, skip_months: float = 0)
     `skip_months=1` gives the 12-1 momentum convention: the last month is
     dropped because short-term reversal contaminates it.
     """
-    lookback = int(round(months * TRADING_DAYS_PER_MONTH))
-    skip = int(round(skip_months * TRADING_DAYS_PER_MONTH))
+    lookback = round(months * TRADING_DAYS_PER_MONTH)
+    skip = round(skip_months * TRADING_DAYS_PER_MONTH)
     if lookback <= 0 or len(df) < lookback + skip + 1:
         return None
     closes = df["close"]
@@ -158,7 +158,7 @@ def reachability(
     (`atr% × √days`) and compares that budget to the target. Both inputs are the
     caller's — pass 5%/2mo and 10%/3mo and you get genuinely different answers.
     """
-    horizon_days = max(1, int(round(horizon_months * TRADING_DAYS_PER_MONTH)))
+    horizon_days = max(1, round(horizon_months * TRADING_DAYS_PER_MONTH))
     if daily_atr_pct is None or target_gain_pct <= 0:
         return {
             "horizon_trading_days": horizon_days,

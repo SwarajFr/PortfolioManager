@@ -28,7 +28,12 @@ class Capability(StrEnum):
     FUNDAMENTALS = "fundamentals"
 
 
-class MarketDataProvider(ABC):
+class MarketDataProvider(ABC):  # noqa: B024 - see below
+    # No @abstractmethod on purpose. What a provider supports is declared as
+    # *data* (the `capabilities` frozenset), not by which methods it overrides,
+    # so the base supplies working defaults that raise
+    # CapabilityNotSupportedError. Forcing every subclass to stub out all five
+    # fetchers would defeat that. ABC is kept as a statement of intent.
     name: ClassVar[str] = ""
     capabilities: ClassVar[frozenset[Capability]] = frozenset()
 

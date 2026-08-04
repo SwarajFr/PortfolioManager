@@ -70,7 +70,7 @@ def _held_symbols() -> set[str]:
     screen is still useful without one, it just cannot flag overlap."""
     try:
         return {ref.symbol.upper() for ref in _holding_refs()}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - no session -> rank buys without overlap flagging
         logger.warning("holdings unavailable while ranking buys: %s", exc)
         return set()
 
@@ -86,7 +86,7 @@ def _safe_diversity() -> dict:
     """Correlation structure is a nice-to-have reason, not a prerequisite."""
     try:
         return get_diversity_analysis()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - correlation is a bonus reason, not a prerequisite
         logger.warning("diversification metrics unavailable: %s", exc)
         return {}
 
@@ -95,7 +95,7 @@ def _record(entries: list[dict]) -> None:
     """Journalling must never cost the user their answer."""
     try:
         journal.record(entries)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - journalling must never cost the user their answer
         logger.warning("could not write advisor journal: %s", exc)
 
 
@@ -327,7 +327,7 @@ def advice_history(limit: int = 20, kind: str | None = None) -> dict:
     live: dict[str, float] = {}
     try:
         live = {s: q.last_price for s, q in get_market_data().get_quote(symbols).items()}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - journal replay still works without live prices
         logger.warning("live prices unavailable for journal replay: %s", exc)
 
     out = []

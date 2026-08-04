@@ -16,7 +16,7 @@ from core.data import get_market_data
 from core.kite import is_authenticated
 
 from .service import get_overview
-from .settings import get_settings, save_settings, reset_settings
+from .settings import get_settings, reset_settings, save_settings
 
 router = APIRouter()
 

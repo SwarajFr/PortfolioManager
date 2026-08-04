@@ -1,0 +1,73 @@
+name: CI
+
+# Backend and frontend are independent stacks in one repo, so they run as two
+# jobs rather than sequential steps: a frontend lint error should not hide a
+# backend test failure, and both results land on the PR at once.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch makes the previous run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (lint + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # settings.db is created relative to the working directory, and pytest's
+        # pythonpath is "." — both assume backend/ is the cwd.
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        # --frozen fails if uv.lock is out of date with pyproject.toml, so a
+        # dependency added without relocking is caught here, not at runtime.
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Tests
+        # Tests never reach Kite: conftest installs the real MarketDataService
+        # behind a StubProvider, so no credentials are needed.
+        run: uv run pytest -q
+
+  frontend:
+    name: frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        # The build is the real type-and-import check in a repo with no
+        # TypeScript — a bad import passes lint but fails here.
+        run: npm run build

@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+
 from .settings import get_settings
 
 
@@ -11,7 +12,7 @@ def _score_loss_severity(return_pct: float, scores: list) -> int:
     if return_pct >= 0:
         return 0
     if return_pct >= -5:
-        return scores[0]         
+        return scores[0]
     if return_pct >= -10:
         return scores[1]
     if return_pct >= -20:

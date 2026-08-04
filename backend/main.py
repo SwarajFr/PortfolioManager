@@ -11,14 +11,14 @@ here. Miss it and the app still starts — MCP just fails at request time.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from features.auth.routes import router as auth_router
-from features.portfolio.routes import router as portfolio_router
-from features.exit.routes import router as exit_router
-from features.fragility.routes import router as fragility_router
-from features.screener.routes import router as screener_router
 from features.advisor.routes import router as advisor_router
 from features.agent.routes import router as agent_router
+from features.auth.routes import router as auth_router
+from features.exit.routes import router as exit_router
+from features.fragility.routes import router as fragility_router
 from features.mcp.server import mcp_app
+from features.portfolio.routes import router as portfolio_router
+from features.screener.routes import router as screener_router
 
 # The MCP ASGI app's lifespan runs its streamable-HTTP session manager; it MUST
 # be attached to the parent app or MCP requests fail.

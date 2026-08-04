@@ -15,7 +15,6 @@ import pandas as pd
 from ..models import CANDLE_COLUMNS, Candle, empty_history
 from .db import connect
 
-
 #: Ceiling on host parameters in one statement. SQLite's own limit is 999 on
 #: builds before 3.32 and 32766 after, and the bundled version varies by
 #: platform — so batched reads chunk to the old floor rather than probe for it.

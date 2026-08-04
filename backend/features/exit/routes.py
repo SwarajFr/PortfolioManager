@@ -5,8 +5,9 @@ the payload has somewhere to grow — the same shape the portfolio router alread
 uses, where a second key was needed later.
 """
 from fastapi import APIRouter, Request
+
 from .service import get_exit_signals
-from .settings import get_settings, save_settings, reset_settings
+from .settings import get_settings, reset_settings, save_settings
 
 router = APIRouter()
 

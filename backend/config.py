@@ -10,6 +10,7 @@ defaulted, so a missing credential fails at the Kite call with a clear error
 instead of silently authenticating as nobody.
 """
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()

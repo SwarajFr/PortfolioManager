@@ -15,7 +15,7 @@ caller — the feature exposes only `GET /analysis`, with no settings route — 
 `long_window` is in practice fixed at its default. They are kept, rather than
 deleted, as the ready-made other half of that endpoint.
 """
-from core.settings_store import load_settings, save_settings, reset_settings
+from core.settings_store import load_settings, reset_settings, save_settings
 
 _TABLE = "fragility_settings"
 _DEFAULTS = {

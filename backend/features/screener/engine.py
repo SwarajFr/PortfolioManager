@@ -8,10 +8,10 @@ import pandas as pd
 
 from . import compute
 
-REGISTRY: dict[str, type["Strategy"]] = {}
+REGISTRY: dict[str, type[Strategy]] = {}
 
 
-def register(cls: type["Strategy"]) -> type["Strategy"]:
+def register(cls: type[Strategy]) -> type[Strategy]:
     REGISTRY[cls.name] = cls
     return cls
 
@@ -117,7 +117,7 @@ def run_combined(
     scores: pd.DataFrame,
     passes: pd.DataFrame,
 ) -> dict:
-    weights = weights or {s: 1.0 for s in selected}
+    weights = weights or dict.fromkeys(selected, 1.0)
     weights = {s: float(weights.get(s, 1.0)) for s in selected}
     norm = pd.DataFrame(
         {s: compute.percentile_normalize(scores[s]) for s in selected}

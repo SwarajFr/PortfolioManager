@@ -62,7 +62,7 @@ def test_needs_kite_catches_data_layer_auth_error(monkeypatch):
 
 
 # ── T4: portfolio_holdings ───────────────────────────────────────────────────
-import features.mcp.portfolio_tools as portfolio_tools  # noqa: E402
+import features.mcp.portfolio_tools as portfolio_tools
 
 
 def test_portfolio_holdings_formats_rows_and_totals(monkeypatch, market_data, stub_provider):
@@ -98,8 +98,7 @@ def test_portfolio_holdings_empty(monkeypatch, market_data, stub_provider):
 
 
 # ── T5: portfolio_metrics ────────────────────────────────────────────────────
-import features.mcp.fragility_tools as fragility_tools  # noqa: E402
-
+import features.mcp.fragility_tools as fragility_tools
 
 _FULL_ANALYSIS = {
     "scalars": {
@@ -152,7 +151,7 @@ def test_portfolio_metrics_empty(monkeypatch):
 
 
 # ── T6: advisor tools ────────────────────────────────────────────────────────
-import features.mcp.advisor_tools as advisor_tools  # noqa: E402
+import features.mcp.advisor_tools as advisor_tools
 
 
 def test_advisor_tools_pass_caller_params_through(monkeypatch):
@@ -202,7 +201,7 @@ def test_advisor_tools_all_registered():
 
 
 # ── T7: quote ────────────────────────────────────────────────────────────────
-import features.mcp.market_tools as market_tools  # noqa: E402
+import features.mcp.market_tools as market_tools
 
 
 def test_quote_maps_symbols_and_rounds(monkeypatch, market_data, stub_provider):
@@ -241,7 +240,7 @@ def test_quote_empty_input(monkeypatch):
 
 
 # ── T8: auth tools ───────────────────────────────────────────────────────────
-import features.mcp.auth_tools as auth_tools  # noqa: E402
+import features.mcp.auth_tools as auth_tools
 
 
 class _ProfileKite:

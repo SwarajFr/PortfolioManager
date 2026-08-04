@@ -11,9 +11,10 @@ through HTTP.
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
-from core.identity import get_active_user
-from core.kite import kite, is_authenticated
 from config import FRONTEND_URL
+from core.identity import get_active_user
+from core.kite import is_authenticated, kite
+
 from .service import complete_login
 
 router = APIRouter()
@@ -37,4 +38,4 @@ def callback(request_token: str):
         complete_login(request_token)
         return RedirectResponse(f"{FRONTEND_URL}/")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

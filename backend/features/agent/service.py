@@ -26,7 +26,7 @@ def _profile_line() -> str:
     """
     try:
         profile = get_profile()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - an unreadable profile weakens the prompt, it does not break chat
         logger.warning("investor profile unavailable: %s", exc)
         return ""
 

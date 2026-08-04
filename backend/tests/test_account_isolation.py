@@ -9,14 +9,13 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from conftest import build_test_service
 
 import core.identity as identity
 import core.kite as kite_mod
 import core.settings_store as store
 from core.data import set_market_data
 from features.auth import service as auth_service
-
-from conftest import build_test_service
 
 USER_A = "AB1234"
 USER_B = "XY9876"

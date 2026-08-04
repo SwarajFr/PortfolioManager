@@ -153,5 +153,5 @@ def dispatch(name: str, arguments_json: str) -> dict:
         return {"error": f"invalid tool arguments: {e}"}
     try:
         return handler(**args)
-    except Exception as e:  # a broken tool must not kill the agent loop
+    except Exception as e:  # noqa: BLE001 - a broken tool must not kill the agent loop
         return {"error": f"{type(e).__name__}: {e}"}

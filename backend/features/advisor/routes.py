@@ -25,9 +25,9 @@ def actions(
         return portfolio_actions(horizon_months, target_gain_pct, limit)
     except NotAuthenticatedError:
         # A cold token is a login problem, not a server fault — say which.
-        raise HTTPException(status_code=401, detail=_LOGIN_REQUIRED)
+        raise HTTPException(status_code=401, detail=_LOGIN_REQUIRED) from None
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/ideas")
@@ -40,9 +40,9 @@ def ideas(
     try:
         return buy_ideas(horizon_months, target_gain_pct, limit, exclude_held)
     except NotAuthenticatedError:
-        raise HTTPException(status_code=401, detail=_LOGIN_REQUIRED)
+        raise HTTPException(status_code=401, detail=_LOGIN_REQUIRED) from None
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/journal")
