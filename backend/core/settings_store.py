@@ -38,12 +38,9 @@ DB_PATH = "settings.db"
 #: - screener_settings: global for *correctness*, not convenience — strategy
 #:   params feed the shared `signals` table, so per-account weights would make
 #:   that table wrong for one of them.
-#: - agent_settings: configures the LLM, not the portfolio.
 #: - kite_session: holds the one live token; it is what we read to *learn* who
 #:   the user is, so it cannot itself be user-scoped.
-_UNSCOPED_TABLES = frozenset(
-    {"market_data_settings", "screener_settings", "agent_settings", "kite_session"}
-)
+_UNSCOPED_TABLES = frozenset({"market_data_settings", "screener_settings", "kite_session"})
 
 _GLOBAL_KEY = "__global__"
 #: Rows written before account isolation existed. Owned by nobody until the

@@ -2,12 +2,12 @@
  * Root: decides login vs. shell, and which feature page is mounted.
  *
  * Navigation is a string in state against a `PAGES` lookup rather than a
- * router. There are five destinations, no URLs worth deep-linking, and nothing
+ * router. There are four destinations, no URLs worth deep-linking, and nothing
  * nested — a router would add a dependency and a build step to solve a problem
  * this app does not have. The cost is real though: **switching views unmounts
  * the previous page**, so any page-local `useState` is discarded. State that
- * must outlive a view switch belongs in a module-level store, which is why the
- * Agent tab keeps its transcript in `features/agent/chatStore.js`.
+ * must outlive a view switch belongs in a module-level store read through
+ * `useSyncExternalStore`, not in the page.
  *
  * Pages are `lazy` so a cold load ships only the shell and the overview; the
  * heavier fragility and screener bundles arrive when first opened.
@@ -27,14 +27,12 @@ const PortfolioOverviewPage = lazy(() => import("../features/portfolio/Portfolio
 const ExitSignalsPage = lazy(() => import("../features/exit-signals/ExitSignalsPage"));
 const FragilityPage = lazy(() => import("../features/fragility/FragilityPage"));
 const ScreenerPage = lazy(() => import("../features/screener/ScreenerPage"));
-const AgentPage = lazy(() => import("../features/agent/AgentPage"));
 
 const PAGES = {
   overview: PortfolioOverviewPage,
   exit: ExitSignalsPage,
   fragility: FragilityPage,
   screener: ScreenerPage,
-  agent: AgentPage,
 };
 
 export default function App() {

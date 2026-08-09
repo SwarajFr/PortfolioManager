@@ -23,10 +23,4 @@ export const NAV_ITEMS = [
     eyebrow: "Signals",
     description: "Multi-strategy NSE500 stock screener",
   },
-  {
-    id: "agent",
-    label: "Agent",
-    eyebrow: "Assistant",
-    description: "Ask about your portfolio in natural language",
-  },
 ];

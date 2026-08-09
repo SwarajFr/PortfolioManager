@@ -10,7 +10,7 @@
  *
  * The 120s timeout is sized for the slowest legitimate call, not a typical one:
  * a screener refresh walks ~500 symbols against a rate-limited broker API, and
- * an Agent turn waits on a local LLM. Both routinely outlast a default timeout.
+ * routinely outlasts a default timeout.
  */
 import axios from "axios";
 
