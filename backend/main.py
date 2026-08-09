@@ -7,7 +7,6 @@ appears in exactly two lines (import, `include_router`) and nowhere else.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from features.advisor.routes import router as advisor_router
 from features.auth.routes import router as auth_router
 from features.exit.routes import router as exit_router
 from features.fragility.routes import router as fragility_router
@@ -29,4 +28,3 @@ app.include_router(portfolio_router, prefix="/api/portfolio")
 app.include_router(exit_router, prefix="/api/exit")
 app.include_router(fragility_router, prefix="/api/fragility")
 app.include_router(screener_router, prefix="/api/screener")
-app.include_router(advisor_router, prefix="/api/advisor")

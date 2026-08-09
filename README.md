@@ -6,8 +6,7 @@
 
 **A full-stack portfolio analytics dashboard for Zerodha Kite Connect holdings.** It turns raw
 brokerage data into a structured review workflow — concentration control, diversification analysis,
-rule-based exit planning, and multi-strategy screening over the NSE500 — and lets you ask about any
-of it in plain English.
+rule-based exit planning, and multi-strategy screening over the NSE500.
 
 [**Description**](#description) · [**Architecture**](#architecture) · [**How to run**](#how-to-run)
 
@@ -15,7 +14,7 @@ of it in plain English.
 
 ## Description
 
-Five analytics areas. Each is useful on its own, and all five read market data through one shared
+Four analytics areas. Each is useful on its own, and all four read market data through one shared
 service.
 
 | Area | What you get |
@@ -23,8 +22,7 @@ service.
 | **Portfolio Overview** | Allocation against your target bands, group-level P&L, and two concentration caps (top-5 and single-holding) — each breach reported with the rupee amount that would resolve it |
 | **Exit Signals** | Five KPIs scored per holding, summed to 0–100, mapped to `HOLD` / `WATCH` / `TRIM` / `EXIT`. Weights and thresholds are yours to tune |
 | **Fragility** | Ledoit-Wolf shrinkage covariance → PCA-based Effective Number of Bets, weight entropy, diversification ratio, annualized volatility, and the most-correlated pair. Purely descriptive: it reports structure, it does not prescribe trims |
-| **Screener** | Five technical strategies over the NSE500 — a single-strategy leaderboard, or a weighted K-of-N combined screen. [Details below](#screener-strategies) |
-| **Advisor** | Combines the three above into ranked sell / top-up / buy calls, each carrying the reasons and numbers behind it. Backs the Agent tab and the MCP tools |
+| **Screener** | Five technical strategies over the NSE500 — a single-strategy leaderboard, or a weighted K-of-N combined screen |
 
 Position arithmetic is straightforward:
 
@@ -42,13 +40,7 @@ says how many genuinely independent bets you hold, and **Shannon entropy** of th
 many you nominally hold. The gap between those two is the interesting number — it is hidden
 concentration, positions that look diversified but move together.
 
-Two ways to query it in natural language, both strictly **read-only** — neither can place, modify,
-or cancel an order:
-
-- the in-app **Agent** tab, running a local model through Ollama, and
-- an external assistant such as Claude Desktop, over **MCP**.
-
-[More on both →](#ask-in-plain-english)
+Everything is strictly **read-only** — the app can never place, modify, or cancel an order.
 
 ---
 
@@ -59,23 +51,15 @@ to the broker.** Adding a data source is one new provider class, with no feature
 
 ```mermaid
 flowchart TB
-    subgraph clients["Clients"]
-        UI["React SPA<br/><i>Vite · Tailwind</i>"]
-        EXT["External assistant<br/><i>Claude Desktop</i>"]
-    end
+    UI["React SPA<br/><i>Vite · Tailwind</i>"]
 
-    subgraph api["FastAPI · :8000"]
-        REST["REST routers<br/><code>/api/*</code>"]
-        MCP["MCP server<br/><code>/mcp/</code>"]
-    end
+    REST["FastAPI · :8000<br/>REST routers <code>/api/*</code>"]
 
     subgraph features["Feature layer"]
         PF["Portfolio"]
         EX["Exit Signals"]
         FR["Fragility"]
         SC["Screener"]
-        AD["Advisor"]
-        AG["Agent"]
     end
 
     MD["<b>Market Data Service</b><br/><i>the only cache-vs-fetch decision</i>"]
@@ -86,15 +70,10 @@ flowchart TB
     end
 
     KITE["Zerodha Kite Connect"]
-    LLM["Local LLM<br/><i>Ollama</i>"]
 
     UI --> REST
-    EXT --> MCP
-    REST --> PF & EX & FR & SC & AD & AG
-    MCP --> PF & FR & AD
-    AG --> LLM
-    AD --> EX & FR & SC
-    PF & EX & FR & SC & AD --> MD
+    REST --> PF & EX & FR & SC
+    PF & EX & FR & SC --> MD
     MD --> CACHE
     MD --> KITE
     features -. "per-feature config" .-> SET
@@ -128,11 +107,11 @@ capability raises immediately instead of failing obscurely downstream.
 
 ### Code layout
 
-Every feature is layered identically, so knowing one means knowing all five:
+Every feature is layered identically, so knowing one means knowing all four:
 
 ```
 backend/
-  main.py                composition root — mounts 7 routers + the MCP app
+  main.py                composition root — mounts the 5 routers, nothing else
   core/
     data/                the market data service (providers · repositories · service)
     kite.py              session lifecycle only — the token, not the data
@@ -143,18 +122,14 @@ backend/
     service.py           orchestration — the only layer doing I/O
     compute.py           pure computation, no I/O   (or engine.py)
     settings.py          per-feature config
-  tests/                 272 tests, no network — a stub provider stands in for the broker
+  tests/                 149 tests, no network — a stub provider stands in for the broker
 ```
 
-### Two rules worth knowing
-
-**Python ranks, the LLM only narrates.** Every advisor candidate carries
-`reasons: [{code, value, ctx, text}]` with `text` pre-written, so no number in an answer ever
-originates in the model. That is what makes a 9 GB local model trustworthy here.
+### One rule worth knowing
 
 **Account isolation.** Settings are keyed per Zerodha `user_id`, and `complete_login()` is the
-single chokepoint both the REST callback and the MCP login tool pass through — so switching accounts
-purges the previous account's cached holdings in exactly one place.
+single chokepoint every login passes through — so switching accounts purges the previous account's
+cached holdings in exactly one place.
 
 ---
 
@@ -168,7 +143,6 @@ purges the previous account's cached holdings in exactly one place.
 | **[uv](https://docs.astral.sh/uv/)** | the native backend instead — installs Python 3.12 for you |
 | **Node.js 20.19+ or 22.12+** | the frontend, always run on the host (Vite 8's requirement) |
 | **Kite Connect API key** | from [developers.kite.trade](https://developers.kite.trade/) |
-| **[Ollama](https://ollama.com)** *(optional)* | the Agent tab |
 
 ### 1. Configure
 
@@ -179,10 +153,6 @@ KITE_API_KEY=your_api_key
 KITE_API_SECRET=your_api_secret
 REDIRECT_URL=http://localhost:8000/api/auth/callback
 FRONTEND_URL=http://localhost:5173
-
-# Optional — local LLM for the Agent tab (defaults shown; any OpenAI-compatible endpoint works)
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_API_KEY=ollama
 ```
 
 ### 2. Start the backend — pick one
@@ -203,13 +173,8 @@ docker compose down                           # stop
 The source directory is bind-mounted, so edits hot-reload and both SQLite files stay on the host —
 cached candles survive rebuilds and are shared with native runs.
 
-> **Only the backend is containerized.** Compose defines a single service. The frontend still runs
-> on the host with `npm run dev`, and **Ollama is not containerized either — Docker will not
-> install it or pull a model for you.** Install Ollama on the host and pull the model yourself, as
-> in [Ask in plain English](#ask-in-plain-english). Compose points `LLM_BASE_URL` at
-> `host.docker.internal` so the container can reach back out to it, since inside a container
-> `localhost` means the container. Without Ollama running the Agent tab returns `llm_unreachable`,
-> and every other view works normally.
+> **Only the backend is containerized.** Compose defines a single service; the frontend still runs
+> on the host with `npm run dev`.
 
 </details>
 
@@ -245,7 +210,7 @@ npm run dev                          # http://localhost:5173
 ### 4. Use it
 
 Open **http://localhost:5173** and click **Login**, which redirects through Zerodha and back. The
-dashboard then loads five views: **Overview · Exit Signals · Fragility · Screener · Agent**.
+dashboard then loads four views: **Overview · Exit Signals · Fragility · Screener**.
 
 On first login the screener seeds its price cache in a background thread, so those results fill in
 over the next few minutes while the rest of the app stays usable. Re-trigger it any time with
@@ -265,105 +230,3 @@ pull request, so one stack's failure never masks the other's.
 Tests never reach Kite: `tests/conftest.py` installs the **real** `MarketDataService` — real
 cache-vs-fetch logic, real SQLite in a temp dir — behind a `StubProvider`. Configure the stub rather
 than patching feature internals.
-
----
-
-## Screener strategies
-
-Each strategy produces two things per stock from its daily OHLC history: a continuous **`score`**
-for ranking, and a boolean **`pass`** used as a hard gate. All parameters are user-configurable;
-defaults shown.
-
-| Strategy | What it measures | `score` | `pass` when | Defaults |
-|---|---|---|---|---|
-| **MA Crossover** | Trend via fast vs. slow moving average | `(SMA_fast − SMA_slow) / SMA_slow` | `SMA_fast > SMA_slow` | fast 20, slow 50 |
-| **Momentum 12-1** | Classic 12-month-minus-1-month return | `close₋₂₁ / close₋₂₅₂ − 1` | score > 0 | lookback 252, skip 21 |
-| **Breakout** | Close vs. the *prior* N-day high | `close / prior_N_high` | `close > prior_N_high` | n_high 20 |
-| **RSI Reversion** | Contrarian — oversold reads as strong | `100 − RSI` (Wilder) | `RSI < oversold` | period 14, oversold 30 |
-| **52-Week High** | Proximity to the 1-year high | `close / 252d_high` | `close ≥ proximity × 252d_high` | window 252, proximity 0.90 |
-
-> **Breakout excludes today's own bar** from the window high, which is what makes a new high an
-> actual breakout. **RSI Reversion is deliberately contrarian** — it ranks weakness as strength, so
-> oversold names float to the top.
-
-**Individual screen** — one strategy, stocks that `pass` it, ranked by raw `score`.
-
-**Combined screen** — several strategies together:
-
-1. **Normalize** each strategy's scores to a cross-sectional percentile in `[0, 1]`, so
-   differently-scaled signals become comparable.
-2. **Aggregate** as a weighted mean, `Σ(wₛ · normₛ) / Σwₛ` — equal weight if none supplied.
-3. **K-of-N gate** — a stock qualifies only if it passes at least **K** of the **N** selected
-   strategies. `K = "all"` is a strict AND.
-4. **Rank, with fallback** — if nothing qualifies, the top-N by aggregate are shown and flagged as a
-   fallback, rather than returning an empty screen.
-
-Signals are precomputed into the cache during a refresh, and only for symbols that received a new
-daily candle. **The screening endpoints read that cache and never call Kite**, so changing
-strategies, weights, or K re-screens instantly.
-
-> The NSE500 universe (`backend/data/nse500.csv`) is a static, manual, roughly quarterly drop-in of
-> the official constituents CSV — never fetched or scheduled. A refresh skips and logs any symbol it
-> cannot fetch (delisted, removed) rather than aborting the run.
-
----
-
-## Ask in plain English
-
-Two independent **read-only** interfaces over the same analytics. Neither can place, modify, or
-cancel orders.
-
-**Agent tab — in-app, local, free.** Runs a local model via Ollama: no API key, no per-message cost,
-and your holdings never leave your machine.
-
-```bash
-ollama pull gemma4:e4b     # 9.6 GB, laptop/CPU-friendly
-ollama list                # confirm it's there
-```
-
-Open the **Agent** tab and ask *"What should I sell or top up?"*, *"What can I buy for 10% in 3
-months?"*, or *"How did your last calls do?"* — horizons and targets in the question become actual
-arguments, so those last two produce genuinely different answers.
-
-To use a larger local model or a cloud endpoint, set `LLM_BASE_URL` / `LLM_API_KEY` and pick the
-model in settings — no code change. Detail:
-[`backend/features/agent/README.md`](backend/features/agent/README.md).
-
-**MCP server — external assistants.** The same tools are exposed at `http://localhost:8000/mcp/`
-over the Model Context Protocol, driven by whatever assistant you already pay for. Add to
-`claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "kite-portfolio": {
-      "command": "uvx",
-      "args": ["fastmcp-remote", "http://localhost:8000/mcp/"]
-    }
-  }
-}
-```
-
-Tools: `portfolio_holdings`, `portfolio_metrics`, `portfolio_actions`, `buy_ideas`,
-`advice_history`, `investor_profile`, `quote`, plus session helpers. Detail:
-[`backend/features/mcp/README.md`](backend/features/mcp/README.md).
-
----
-
-## Tech stack
-
-**Backend** — FastAPI · Python 3.12 · pandas · NumPy · SciPy · scikit-learn · SQLite · uv · pytest · ruff
-**Frontend** — React 19 · Vite · Tailwind v4 · Recharts · Axios · ESLint (plain JSX, no TypeScript)
-**AI** — FastMCP for the read-only MCP server · OpenAI SDK pointed at local Ollama
-**Broker** — Zerodha Kite Connect
-
-## Disclaimer
-
-This project computes **rule-based technical signals** from your own holdings and cached price
-history. It is not investment advice, it does not predict prices, and every output should be
-verified before you act on it. The author is not responsible for financial decisions made using it.
-
-## License
-
-No license has been chosen yet, so default copyright applies — all rights reserved. If you intend
-this to be reusable, add a `LICENSE` file (MIT is the usual pick for a project like this).

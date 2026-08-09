@@ -2,7 +2,7 @@
 
 `compute_overview` decides the rupee amount the UI tells a user to trade, and
 it had no direct coverage — it was only ever exercised incidentally through the
-wiring and MCP tests, which assert shape rather than values.
+wiring tests, which assert shape rather than values.
 
 These pin the behaviour: the money, the band logic, and the two concentration
 caps. They are deliberately written against hand-computed numbers rather than
