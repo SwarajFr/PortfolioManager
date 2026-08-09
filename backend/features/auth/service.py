@@ -1,9 +1,8 @@
 """Login orchestration — the one path from a request_token to a live session.
 
-Both entry points (the REST `/callback` route and the MCP login tool) funnel
-through `complete_login`, which is what makes "on account change, purge the
-caches" enforceable: there is a single place where the active account can
-change, so there is a single place that has to remember.
+Every login funnels through `complete_login`, which is what makes "on account
+change, purge the caches" enforceable: there is a single place where the active
+account can change, so there is a single place that has to remember.
 """
 from config import API_SECRET
 from core.data import get_market_data
@@ -15,13 +14,11 @@ from features.screener.service import screener_on_login
 def complete_login(request_token: str) -> dict:
     """Single source of truth for turning a request_token into a live session.
 
-    Shared by the REST /callback route and the MCP kite_complete_login tool:
-    generate session -> purge any previous account's cached state -> set (and
+    Generate session -> purge any previous account's cached state -> set (and
     persist) token -> kick the screener refresh.
 
     The purge lives here rather than in core.kite because core.data.providers.kite
-    imports core.kite, so core.kite importing core.data would be a cycle. This is
-    also the single chokepoint both login paths pass through.
+    imports core.kite, so core.kite importing core.data would be a cycle.
     """
     data = kite.generate_session(request_token, api_secret=API_SECRET)
 

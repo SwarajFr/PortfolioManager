@@ -5,8 +5,8 @@ navigates the *browser* here — this is a page load, not an XHR, so the only
 useful response is somewhere for the user to land.
 
 All session work is delegated to `service.complete_login`; this module stays
-transport-only so the MCP login tool can reuse the same logic without going
-through HTTP.
+transport-only, so the account-change purge that login has to perform lives
+somewhere testable without an HTTP round trip.
 """
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
