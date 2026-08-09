@@ -4,50 +4,58 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![React 19](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 
-A full-stack portfolio analytics dashboard for **Zerodha Kite Connect** holdings — turning raw
-brokerage data into a structured review workflow: concentration control, diversification analysis,
-rule-based exit planning, and multi-strategy screening over the NSE500.
+**A full-stack portfolio analytics dashboard for Zerodha Kite Connect holdings.** It turns raw
+brokerage data into a structured review workflow — concentration control, diversification analysis,
+rule-based exit planning, and multi-strategy screening over the NSE500 — and lets you ask about any
+of it in plain English.
 
-You can also just **ask it questions in plain English**, either from the in-app Agent tab running a
-local LLM, or from an external assistant like Claude Desktop over MCP. Both paths are strictly
-read-only — nothing here can place, modify, or cancel an order.
+[**Description**](#description) · [**Architecture**](#architecture) · [**How to run**](#how-to-run)
 
 ---
 
-## What it does
+## Description
 
-Five analytics areas, each independently useful and all reading from one shared market-data service.
+Five analytics areas. Each is useful on its own, and all five read market data through one shared
+service.
 
 | Area | What you get |
 |---|---|
-| **Portfolio Overview** | Allocation vs. target bands, group-level P&L, and two concentration caps (top-5, single-holding), each with the rupee amount that would resolve a breach |
+| **Portfolio Overview** | Allocation against your target bands, group-level P&L, and two concentration caps (top-5 and single-holding) — each breach reported with the rupee amount that would resolve it |
 | **Exit Signals** | Five KPIs scored per holding, summed to 0–100, mapped to `HOLD` / `WATCH` / `TRIM` / `EXIT`. Weights and thresholds are yours to tune |
-| **Fragility & Diversification** | Ledoit-Wolf shrinkage covariance → PCA-based Effective Number of Bets, weight entropy, diversification ratio, annualized portfolio vol, and the correlation matrix with its most-correlated pair. Purely descriptive — it reports structure, it does not prescribe trims |
-| **Screener** | Five technical strategies over the NSE500, as a single-strategy leaderboard or a weighted K-of-N combined screen |
+| **Fragility** | Ledoit-Wolf shrinkage covariance → PCA-based Effective Number of Bets, weight entropy, diversification ratio, annualized volatility, and the most-correlated pair. Purely descriptive: it reports structure, it does not prescribe trims |
+| **Screener** | Five technical strategies over the NSE500 — a single-strategy leaderboard, or a weighted K-of-N combined screen. [Details below](#screener-strategies) |
 | **Advisor** | Combines the three above into ranked sell / top-up / buy calls, each carrying the reasons and numbers behind it. Backs the Agent tab and the MCP tools |
 
-### The numbers behind it
+Position arithmetic is straightforward:
 
 ```
-portfolio value   = last_price × quantity
-invested capital  = average_price × quantity
-P&L               = value − invested
-return %          = P&L / invested × 100
-weight %          = holding value / total portfolio value × 100
+value    = last_price × quantity
+invested = average_price × quantity
+P&L      = value − invested
+return % = P&L / invested × 100
+weight % = value / total portfolio value × 100
 ```
 
-Risk analytics use **Ledoit-Wolf shrinkage covariance** (a raw sample covariance is too unstable at
-portfolio sample sizes), **PCA-based ENB** for how many independent bets you actually hold, and
-**Shannon entropy** of weights for nominal spread. The gap between those last two is the interesting
-part: it is hidden concentration — positions that look diversified but move together.
+The risk analytics are where the real modelling sits. Covariance uses **Ledoit-Wolf shrinkage**,
+because a raw sample covariance is too unstable at portfolio sample sizes. **PCA-based ENB** then
+says how many genuinely independent bets you hold, and **Shannon entropy** of the weights says how
+many you nominally hold. The gap between those two is the interesting number — it is hidden
+concentration, positions that look diversified but move together.
+
+Two ways to query it in natural language, both strictly **read-only** — neither can place, modify,
+or cancel an order:
+
+- the in-app **Agent** tab, running a local model through Ollama, and
+- an external assistant such as Claude Desktop, over **MCP**.
+
+[More on both →](#ask-in-plain-english)
 
 ---
 
 ## Architecture
 
 The load-bearing rule: **every feature reads market data through one service, and nothing else talks
-to the broker.** Swapping Kite for another data source is one new provider class, with no feature
-touched.
+to the broker.** Adding a data source is one new provider class, with no feature touched.
 
 ```mermaid
 flowchart TB
@@ -92,17 +100,18 @@ flowchart TB
     features -. "per-feature config" .-> SET
 ```
 
-### Why a single data service
+### Why one data service
 
 Two classes of data, two policies, decided in exactly one place:
 
 - **Historical candles are cache-first.** A settled daily bar never changes, so the store is
-  authoritative — only the missing head/tail of a requested window is fetched, then appended.
-  This is why screens stay fast and still work on a cold token.
-- **Holdings and quotes are live.** They are current account and market state, so they are
-  memoised for seconds only — just long enough to collapse repeat calls within one request.
+  authoritative — only the missing head or tail of a requested window is fetched, then appended.
+  This is why screens stay fast and keep working on a cold token.
+- **Holdings and quotes are live.** They are current account and market state, so they are memoised
+  for seconds only, just long enough to collapse repeat calls within one request.
 
-Underneath sit two swappable halves:
+Inside it sit two swappable halves — providers (one per upstream, owning vendor quirks, chunking and
+rate limiting) and repositories (SQLite persistence):
 
 ```mermaid
 flowchart LR
@@ -114,42 +123,38 @@ flowchart LR
     K --> API["Kite API"]
 ```
 
-Providers self-register and declare a `capabilities` frozenset; asking for an undeclared capability
-raises rather than failing obscurely downstream.
+Providers self-register and declare a `capabilities` frozenset, so asking for an unsupported
+capability raises immediately instead of failing obscurely downstream.
 
-### Backend layout
+### Code layout
 
 Every feature is layered identically, so knowing one means knowing all five:
 
 ```
-backend/features/<name>/
-  routes.py     FastAPI router — transport only
-  service.py    orchestration — the only layer doing I/O
-  compute.py    pure computation, no I/O  (or engine.py)
-  settings.py   per-feature config via core/settings_store.py
-```
-
-```
 backend/
-  main.py              composition root — mounts 7 routers + the MCP app
+  main.py                composition root — mounts 7 routers + the MCP app
   core/
-    data/              the market data service (providers · repositories · service)
-    kite.py            session lifecycle only — token, not data
-    identity.py        the active Zerodha user_id (dependency-free, breaks an import cycle)
-    settings_store.py  per-account settings persistence
-  features/            portfolio · exit · fragility · screener · advisor · agent · auth · mcp
-  tests/               272 tests, no network — a stub provider stands in for the broker
+    data/                the market data service (providers · repositories · service)
+    kite.py              session lifecycle only — the token, not the data
+    identity.py          the active Zerodha user_id (dependency-free, breaks an import cycle)
+    settings_store.py    per-account settings persistence
+  features/<name>/
+    routes.py            FastAPI router — transport only
+    service.py           orchestration — the only layer doing I/O
+    compute.py           pure computation, no I/O   (or engine.py)
+    settings.py          per-feature config
+  tests/                 272 tests, no network — a stub provider stands in for the broker
 ```
 
-### Two design rules worth knowing
+### Two rules worth knowing
 
 **Python ranks, the LLM only narrates.** Every advisor candidate carries
 `reasons: [{code, value, ctx, text}]` with `text` pre-written, so no number in an answer ever
 originates in the model. That is what makes a 9 GB local model trustworthy here.
 
-**Account isolation.** Settings are keyed per Zerodha `user_id`. `complete_login()` is the single
-chokepoint both the REST callback and the MCP login tool pass through, so switching accounts purges
-the previous account's cached holdings in exactly one place.
+**Account isolation.** Settings are keyed per Zerodha `user_id`, and `complete_login()` is the
+single chokepoint both the REST callback and the MCP login tool pass through — so switching accounts
+purges the previous account's cached holdings in exactly one place.
 
 ---
 
@@ -160,7 +165,7 @@ the previous account's cached holdings in exactly one place.
 | | Needed for |
 |---|---|
 | **Docker Desktop** | the backend, containerized — this is the only piece Docker runs |
-| **[uv](https://docs.astral.sh/uv/)** | the native backend — installs Python 3.12 for you |
+| **[uv](https://docs.astral.sh/uv/)** | the native backend instead — installs Python 3.12 for you |
 | **Node.js 20.19+ or 22.12+** | the frontend, always run on the host (Vite 8's requirement) |
 | **Kite Connect API key** | from [developers.kite.trade](https://developers.kite.trade/) |
 | **[Ollama](https://ollama.com)** *(optional)* | the Agent tab |
@@ -175,7 +180,7 @@ KITE_API_SECRET=your_api_secret
 REDIRECT_URL=http://localhost:8000/api/auth/callback
 FRONTEND_URL=http://localhost:5173
 
-# Optional — local LLM for the Agent tab (defaults shown, any OpenAI-compatible endpoint works)
+# Optional — local LLM for the Agent tab (defaults shown; any OpenAI-compatible endpoint works)
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
 ```
@@ -188,10 +193,8 @@ LLM_API_KEY=ollama
 From the repo root:
 
 ```bash
-docker compose up --build          # backend at http://localhost:8000
-```
+docker compose up --build                     # backend at http://localhost:8000
 
-```bash
 docker compose run --rm backend pytest -q     # tests
 docker compose logs -f backend                # follow logs
 docker compose down                           # stop
@@ -205,7 +208,7 @@ cached candles survive rebuilds and are shared with native runs.
 > install it or pull a model for you.** Install Ollama on the host and pull the model yourself, as
 > in [Ask in plain English](#ask-in-plain-english). Compose points `LLM_BASE_URL` at
 > `host.docker.internal` so the container can reach back out to it, since inside a container
-> `localhost` means the container. Without Ollama running, the Agent tab returns `llm_unreachable`
+> `localhost` means the container. Without Ollama running the Agent tab returns `llm_unreachable`,
 > and every other view works normally.
 
 </details>
@@ -241,26 +244,19 @@ npm run dev                          # http://localhost:5173
 
 ### 4. Use it
 
-Open **http://localhost:5173** and click **Login** — this redirects through Zerodha and back. The
+Open **http://localhost:5173** and click **Login**, which redirects through Zerodha and back. The
 dashboard then loads five views: **Overview · Exit Signals · Fragility · Screener · Agent**.
 
-On first login the screener seeds its price cache in a background thread, so screener results fill
-in over the next few minutes while the rest of the app stays usable. Re-trigger it any time with
+On first login the screener seeds its price cache in a background thread, so those results fill in
+over the next few minutes while the rest of the app stays usable. Re-trigger it any time with
 `POST /api/screener/refresh`.
 
----
-
-## Development
+### Development
 
 ```bash
-# Backend — from backend/
-uv run pytest -q          # 272 tests, no network access required
-uv run ruff check .       # lint
-uv run ruff check . --fix
-
-# Frontend — from frontend/
-npm run lint
-npm run build
+# Backend — from backend/          # Frontend — from frontend/
+uv run pytest -q                    npm run lint
+uv run ruff check .                 npm run build
 ```
 
 CI runs backend (lint + tests) and frontend (lint + build) as independent jobs on every push and
@@ -299,8 +295,8 @@ defaults shown.
 2. **Aggregate** as a weighted mean, `Σ(wₛ · normₛ) / Σwₛ` — equal weight if none supplied.
 3. **K-of-N gate** — a stock qualifies only if it passes at least **K** of the **N** selected
    strategies. `K = "all"` is a strict AND.
-4. **Rank, with fallback** — if nothing qualifies, the top-N by aggregate are shown and the result
-   is flagged as a fallback, rather than returning an empty screen.
+4. **Rank, with fallback** — if nothing qualifies, the top-N by aggregate are shown and flagged as a
+   fallback, rather than returning an empty screen.
 
 Signals are precomputed into the cache during a refresh, and only for symbols that received a new
 daily candle. **The screening endpoints read that cache and never call Kite**, so changing
@@ -317,10 +313,8 @@ strategies, weights, or K re-screens instantly.
 Two independent **read-only** interfaces over the same analytics. Neither can place, modify, or
 cancel orders.
 
-### Agent tab — in-app, local, free
-
-Runs a local model via Ollama: no API key, no per-message cost, and your holdings never leave your
-machine.
+**Agent tab — in-app, local, free.** Runs a local model via Ollama: no API key, no per-message cost,
+and your holdings never leave your machine.
 
 ```bash
 ollama pull gemma4:e4b     # 9.6 GB, laptop/CPU-friendly
@@ -332,12 +326,12 @@ months?"*, or *"How did your last calls do?"* — horizons and targets in the qu
 arguments, so those last two produce genuinely different answers.
 
 To use a larger local model or a cloud endpoint, set `LLM_BASE_URL` / `LLM_API_KEY` and pick the
-model in settings — no code change. Detail: [`backend/features/agent/README.md`](backend/features/agent/README.md).
+model in settings — no code change. Detail:
+[`backend/features/agent/README.md`](backend/features/agent/README.md).
 
-### MCP server — external assistants
-
-The same tools are exposed at `http://localhost:8000/mcp/` over the Model Context Protocol, driven
-by whatever assistant you already pay for. Add to `claude_desktop_config.json`:
+**MCP server — external assistants.** The same tools are exposed at `http://localhost:8000/mcp/`
+over the Model Context Protocol, driven by whatever assistant you already pay for. Add to
+`claude_desktop_config.json`:
 
 ```json
 {
@@ -362,8 +356,6 @@ Tools: `portfolio_holdings`, `portfolio_metrics`, `portfolio_actions`, `buy_idea
 **Frontend** — React 19 · Vite · Tailwind v4 · Recharts · Axios · ESLint (plain JSX, no TypeScript)
 **AI** — FastMCP for the read-only MCP server · OpenAI SDK pointed at local Ollama
 **Broker** — Zerodha Kite Connect
-
----
 
 ## Disclaimer
 
